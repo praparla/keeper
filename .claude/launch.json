@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dev",
+      "runtimeExecutable": "/Users/pranava/.fnm/node-versions/v22.22.1/installation/bin/node",
+      "runtimeArgs": ["/Users/pranava/.fnm/node-versions/v22.22.1/installation/bin/npx", "next", "dev"],
+      "port": 3000
+    }
+  ]
+}

@@ -13,9 +13,6 @@
 - [ ] **Authentication** · `L`
   Re-enable auth gates (currently bypassed with `DEV_USER`). Configure actual Google Provider client IDs and a real SMS OTP service (e.g., Twilio Verify). Remove `src/lib/dev-user.ts` and restore `auth()` calls in all server actions, pages, and API routes. Search for `TODO:` comments to find every bypass point.
 
-- [ ] **One-Tap Check-In** · `S`
-  A single button on the home screen: "I visited today — all good" or "I visited — flagged a concern." Logs a timestamped entry visible to the whole family. The #1 pain point in competitor research is that writing full updates is too high-friction; a one-tap signal that takes under 10 seconds covers 80% of daily use. *Inspired by: ianacare's 45-second task request flow.*
-
 - [ ] **Workload Visibility** · `M`
   A quiet "who's done what" summary (past 7 and 30 days): tasks completed, check-ins logged, vitals updated, per family member. No gamification — just data. Addresses the unspoken "I'm doing more than you" tension that 40% of caregiver families report. No competitor app has built this well. *Source: AARP caregiver sibling conflict research.*
 
@@ -29,8 +26,10 @@
 - [ ] **Activity Feed** · `M`
   Unified chronological feed: task created, assigned, completed, check-in logged, vital updated. Every competitor uses a feed as the connective tissue between family members. Simple card-per-event, avatar + action + timestamp. No social reactions needed — just visibility. *Pattern validated across: CaringBridge, Caring Village, ianacare, Carely.*
 
-- [ ] **Color-Coded Family Members** · `S`
-  Assign each family member one of 6 soft, pre-defined colors. Tasks, feed entries, and avatars tinted with their color. Instant visual recognition without reading names. *Inspired by Cozi; validated as the most-cited "this works" pattern in competitor design research.*
+- [x] **Color-Coded Family Members** · `S` *(Done: User.color field + MemberAvatar component + colored initials on task cards)*
+
+- [ ] **One-Tap Check-In** · `S`
+  A single button on the home screen: "I visited today — all good" or "I visited — flagged a concern." Logs a timestamped entry visible to the whole family. *Deprioritized from High: not blocking, deferred until core UX is polished.*
 
 - [ ] **Recurring Tasks** · `M`
   Toggle on a task for weekly/monthly recurrence (e.g., pill pickup, doctor follow-up). Auto-recreate on completion. Most families have 3–5 recurring care tasks that shouldn't require manual re-entry. *Gap identified in: CareZone shutdown feedback and Reddit caregiving threads.*
@@ -47,14 +46,11 @@
 - [ ] **Threshold Alerts** · `M`
   Auto-notify all family members if BP > 140/90 or weight changes > 5 lbs/week. Requires structured vitals above. Addresses the "I didn't know it was that bad" moment families describe. *Depends on: Structured Vital Signs.*
 
-- [ ] **Swipe Gestures on Task Cards** · `S`
-  Swipe right = complete, swipe left = reassign. Standard mobile pattern (used in Todoist, Things, Reminders). Reduces taps for the most common task actions. Mobile-first, thumb-friendly.
+- [x] **Swipe Gestures on Task Cards** · `S` *(Done: right-swipe to assign/resolve with background indicator)*
 
-- [ ] **Warm Off-White / Soft Teal Design Pass** · `S`
-  Audit current color palette. Swap pure white backgrounds for warm off-white (#FAFAF8 or similar). Replace any multi-color accent palette with a single soft teal primary + near-black text. Large tap targets (44×44pt min). Line height ≥ 1.5. *Competitor finding: Caring Village's 3-color palette (yellow + cyan + pink) is the most-cited visual complaint. ianacare's single-teal approach is consistently praised as calming and trustworthy.*
+- [x] **Warm Off-White / Soft Teal Design Pass** · `S` *(Done: oklch warm off-white bg + soft teal primary in globals.css)*
 
-- [ ] **Empty States on Every View** · `S`
-  Replace blank screens with a brief message + primary CTA when there's no data. "No tasks yet — add one." Every competitor app's worst-reviewed onboarding moment is landing on a blank screen with no guidance.
+- [x] **Empty States on Every View** · `S` *(Done: reusable EmptyState component with icons + CTAs on dashboard and vital-info)*
 
 ---
 

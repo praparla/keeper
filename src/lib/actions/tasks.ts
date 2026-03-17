@@ -109,7 +109,7 @@ export async function resolveTask(taskId: string) {
 
 export async function getUsers() {
   return prisma.user.findMany({
-    select: { id: true, name: true, email: true, image: true },
+    select: { id: true, name: true, email: true, image: true, color: true },
     orderBy: { name: "asc" },
   });
 }

@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/db";
-import { DEV_USER } from "@/lib/dev-user";
+import { DEV_USER, getDevUserId } from "@/lib/dev-user";
 import { SettingsClient } from "./settings-client";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   // TODO: Get user from auth session
+  const userId = await getDevUserId();
   const user = await prisma.user.findFirst({
     where: { email: DEV_USER.email },
   });
@@ -13,7 +14,7 @@ export default async function SettingsPage() {
   return (
     <SettingsClient
       user={{
-        id: user?.id ?? DEV_USER.id,
+        id: user?.id ?? userId,
         name: user?.name ?? DEV_USER.name,
         email: user?.email ?? DEV_USER.email,
         phoneNumber: user?.phoneNumber ?? "",

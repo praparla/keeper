@@ -24,8 +24,16 @@ import { createTask } from "@/lib/actions/tasks";
 import { toast } from "sonner";
 import { TaskType } from "@prisma/client";
 
-export function QuickAddFab() {
-  const [open, setOpen] = useState(false);
+export function QuickAddFab({
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+}: {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+} = {}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = controlledOnOpenChange ?? setInternalOpen;
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [type, setType] = useState<TaskType>("Note");

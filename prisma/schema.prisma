@@ -16,6 +16,7 @@ model User {
   emailVerified DateTime?
   image         String?
   phoneNumber   String?
+  color         String?   @default("teal")
   emailReminders Boolean  @default(true)
   smsReminders   Boolean  @default(true)
 

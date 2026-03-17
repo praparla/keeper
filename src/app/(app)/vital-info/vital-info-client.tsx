@@ -13,10 +13,12 @@ import {
   Stethoscope,
   Shield,
   Phone,
+  Heart,
   Edit2,
   Save,
   X,
 } from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
 
 const categoryIcons: Record<string, React.ReactNode> = {
   Medications: <Pill className="h-5 w-5 text-blue-600" />,
@@ -54,11 +56,10 @@ export function VitalInfoClient({ items }: { items: VitalInfo[] }) {
 
       <div className="space-y-4">
         {items.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-8 text-center">
-            <p className="text-sm text-muted-foreground">
-              No vital info yet. Seed the database or add entries.
-            </p>
-          </div>
+          <EmptyState
+            icon={Heart}
+            message="No vital info yet. Run npm run db:seed to get started."
+          />
         ) : (
           items.map((item) => (
             <Card key={item.id}>
