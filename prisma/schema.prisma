@@ -1,0 +1,106 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// ── NextAuth Models ──
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  phoneNumber   String?
+  emailReminders Boolean  @default(true)
+  smsReminders   Boolean  @default(true)
+
+  accounts      Account[]
+  sessions      Session[]
+  assignedTasks Task[]    @relation("Assignee")
+  createdTasks  Task[]    @relation("Creator")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ── Application Models ──
+
+enum TaskType {
+  Medical
+  Household
+  Errand
+  Note
+}
+
+enum TaskStatus {
+  Open
+  InProgress
+  Resolved
+}
+
+model Task {
+  id          String     @id @default(cuid())
+  title       String
+  description String?
+  type        TaskType   @default(Note)
+  status      TaskStatus @default(Open)
+  dueDate     DateTime?
+
+  assigneeId  String?
+  assignee    User?      @relation("Assignee", fields: [assigneeId], references: [id])
+
+  creatorId   String?
+  creator     User?      @relation("Creator", fields: [creatorId], references: [id])
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model VitalInfo {
+  id       String @id @default(cuid())
+  category String
+  content  String 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
