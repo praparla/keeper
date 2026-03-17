@@ -1,6 +1,6 @@
-# CLAUDE.md — Universal Development Principles
+# CLAUDE.md — Keeper Project Development Principles
 
-> Distilled from patterns across multiple projects. Apply universally; skip sections irrelevant to the current project type.
+> Next.js 16 (App Router) · Prisma · NextAuth v5 · React 19 · Tailwind CSS · TypeScript
 
 ---
 
@@ -11,7 +11,7 @@ Never blindly write code. Always follow this loop:
 1. **Explore** — Search the codebase. Find relevant files, understand existing patterns before touching anything.
 2. **Plan** — Assess the blast radius (how many files touched, how long it takes). For significant changes, present 2–3 high-level approaches with pros/cons and ask for human approval before writing code.
 3. **Code** — Implement following the rules below.
-4. **Verify** — Run tests. Fix all failures before declaring the task complete.
+4. **Verify** — Run `npm run build` and `npm run lint`. Fix all failures before declaring the task complete.
 
 **Read before edit:** Always read a file before editing it, even if it was read earlier in the conversation.
 
@@ -31,66 +31,130 @@ Never blindly write code. Always follow this loop:
 
 - **No over-engineering.** Only make changes directly requested or clearly necessary. Keep solutions simple.
 - **Single source of truth.** Constants, configs, and shared types derive from one place.
-- **Modular design.** Separate concerns: data fetching, processing, storage, and presentation are distinct layers.
-- **Idempotent operations.** Re-running any operation should be safe and produce the same result. Use `INSERT OR IGNORE` patterns, cache checks, or deduplication by unique key.
-- **Static when possible.** Prefer baked-in data over runtime backends when the data update cycle allows it.
+- **Modular design.** Separate concerns: data fetching, business logic, and presentation are distinct layers.
+- **Server-first.** Prefer React Server Components and Server Actions over client-side data fetching. Move to the client only when interactivity requires it.
 - **Cost-optimized.** Stay on free tiers and use the cheapest resources that meet requirements.
-- **CLI-first.** Build CLI entry points before UI. Agents can invoke CLIs directly to self-validate output, closing the feedback loop without human intervention.
 - **Document subsystems.** Maintain a `docs/` folder with notes on non-obvious subsystems, design decisions, and correct CLI invocations. One line of documentation prevents repeated mistakes.
 
 ---
 
-## Error Resilience
+## Next.js App Router Standards
 
-- **Never let a single item failure crash the pipeline.** Wrap individual record processing in try/except. Log and continue.
-- **Log aggressively.** Every request, parse, API call, cache hit/miss, and filter decision should be logged.
-- **Cache everything.** Re-runs should be fast and cheap. Multi-layer caching where appropriate.
-- **Validate everything.** Invalid responses from external services → log and skip, never crash.
-- **Track errors visibly.** Use an `issues.md` file or errors array — failures must be visible, not silent.
+- **Server Components by default.** Only add `"use client"` when the component needs hooks, event handlers, or browser APIs.
+- **Server Actions for mutations.** Define data mutations as Server Actions in `src/lib/actions/`. Never POST to an API route for simple CRUD — use Server Actions.
+- **Route organization.** App routes live in `src/app/`. Shared layouts use `layout.tsx`. Auth-protected routes go under `src/app/(app)/`.
+- **Data fetching.** Fetch data in Server Components or Server Actions. Pass data down as props; don't re-fetch in child components.
+- **Error boundaries.** Add `error.tsx` and `not-found.tsx` alongside `page.tsx` for every route that can fail.
+- **Loading states.** Add `loading.tsx` for routes with async data fetches. Use Suspense boundaries for partial loading.
+- **`next/navigation` only in Client Components.** `useRouter`, `usePathname`, `useSearchParams` require `"use client"`.
+- **Build check:** Run `npm run build` after significant changes to catch type errors and build-time failures early.
 
 ---
 
-## Security & Credential Handling
+## Prisma & Database Standards
 
-- **Never commit secrets.** API keys, tokens, and passwords must never appear in committed code.
-- Read credentials from environment variables only (e.g., `os.environ["API_KEY"]`). Halt with a clear error if missing.
-- Never log or print credential values.
-- Always `.gitignore`: `.env`, `.env.local`, `credentials.json`, `secrets/`, `node_modules/`, `__pycache__/`, `dist/`, `*.pyc`.
-- Before committing: `git diff --cached | grep -iE "apikey|password|token|secret"`.
+- **Schema is the source of truth.** All data shape changes go through `prisma/schema.prisma` first, then `npm run db:push` or a migration.
+- **Never write raw SQL** unless Prisma cannot express the query. Use Prisma Client exclusively.
+- **Seed data lives in `prisma/seed.ts`.** Re-seeding must be idempotent — use `upsert` not `create` in seeds.
+- **Single Prisma Client instance.** Import from `src/lib/db.ts` only. Never instantiate `PrismaClient` directly in components or actions.
+- **Transactions for multi-step writes.** Use `prisma.$transaction([...])` when multiple writes must succeed or fail together.
+- **Check relations before deleting.** Respect cascade rules. Deleting a parent record may cascade to children — verify intent.
+- **After schema changes:** Run `npm run db:generate` to regenerate the Prisma client, then `npm run db:push` to sync the DB.
+
+---
+
+## Authentication & Authorization (NextAuth v5)
+
+- **Session check in every protected Server Action.** Call `auth()` at the top of every action that reads or writes user data. Throw or return an error if no session exists.
+- **Never trust client-supplied user IDs.** Always derive the acting user from `session.user.id`, not from request body or URL params.
+- **Auth config lives in `src/lib/auth.ts`.** Do not duplicate auth logic elsewhere.
+- **Environment variables for secrets.** `AUTH_SECRET`, `DATABASE_URL`, and any OAuth credentials must be in `.env.local` only, never committed.
 
 ---
 
 ## Testing & Validation
 
-- **Write tests alongside code, not as an afterthought.** Every new module or bug fix includes corresponding tests.
-- Write a regression test for every bug fix.
-- Validate output data against expected schemas before writing to disk.
-- **Cover edge cases, not just happy paths:**
-  - Empty input: `[]`, `{}`, `""`
-  - Null/undefined for every optional field
-  - Boundary values (first/last page, exact date boundaries, zero counts)
-  - Combined states (e.g., multiple filters active simultaneously)
-- Run the full test suite before committing to catch regressions.
+**Tests are mandatory with every code change.** Bug fix → regression test. New feature → feature tests. Refactor → confirm existing tests still pass.
+
+### Setup (not yet installed — add when writing first tests)
+Recommended stack: **Vitest** + **@testing-library/react** + **@testing-library/user-event**
+
+```bash
+npm install -D vitest @vitejs/plugin-react @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom
+```
+
+Add to `package.json` scripts:
+```json
+"test": "vitest",
+"test:run": "vitest run"
+```
+
+### What to test
+- **Server Actions** — unit test business logic and DB interactions (mock Prisma with `vitest.mock`)
+- **Utility functions** (`src/lib/utils.ts`, etc.) — pure functions are easiest to test; test them thoroughly
+- **React components** — test user interactions and conditional rendering, not implementation details
+- **Auth guards** — verify that unauthenticated requests to Server Actions are rejected
+
+### Coverage requirements
+- Every bug fix **must** include a test that would have caught the bug
+- Every new Server Action **must** have at least one happy-path test and one error-path test
+- **Cover edge cases:**
+  - Empty/null optional fields
+  - Unauthenticated access attempts
+  - Invalid input (wrong types, missing required fields)
+  - Concurrent or duplicate submissions
+
+### Running checks
+```bash
+npm run lint          # ESLint — fix all warnings before committing
+npm run build         # Full type check + build — must pass before merging
+npm run test:run      # All tests — must pass before committing
+```
+
+---
+
+## Frontend Standards
+
+- **Functional components + hooks only.** No class components.
+- **`"use client"` at the top of the file** when the component needs interactivity. Keep client boundary as low in the tree as possible.
+- **Colors, enums, and constants in a dedicated constants file** — never hardcoded inline.
+- **Data transforms belong in Server Actions or utility functions**, not in components.
+- **Proper loading, error, and empty states on every view.** Null values show explicit placeholders — never blank UI or missing fields.
+- **All interactive elements must have visible focus indicators** for accessibility.
+- **Mobile-first responsive design.** All features must work on both mobile and desktop. This app is mobile-primary — test on small viewports.
+- **TypeScript strict mode.** No `any` types. If a type is complex, define it explicitly in `src/types/` or co-locate it with the feature.
+- **Radix UI for primitives.** Prefer Radix UI components from `src/components/ui/` before writing custom interactive components.
+- **Toast notifications via Sonner.** Use `toast.success` / `toast.error` for Server Action outcomes — not custom alert state.
+
+---
+
+## Error Resilience
+
+- **Never swallow errors silently.** Log and surface them — use Sonner toasts for user-facing errors, `console.error` for server-side.
+- **Validate Server Action inputs.** Never trust data from forms or client components. Validate shape and types before DB writes.
+- **Track errors visibly.** Use `issues.md` in the project root — failures must be visible, not silent.
+
+---
+
+## Security & Credential Handling
+
+- **Never commit secrets.** `AUTH_SECRET`, `DATABASE_URL`, OAuth credentials must never appear in committed code.
+- Credentials live in `.env.local` only. Halt with a clear error if missing.
+- Never log session tokens or user passwords.
+- Always `.gitignore`: `.env`, `.env.local`, `credentials.json`, `secrets/`, `node_modules/`, `.next/`, `*.pyc`.
+- Before committing: `git diff --cached | grep -iE "apikey|password|token|secret"`.
+- **Password hashing.** Use `bcryptjs` (already a dependency). Never store plaintext passwords.
 
 ---
 
 ## Git Discipline
 
 - **Commit often** at natural checkpoints — small, focused commits over large monolithic ones.
-  - After each new module/feature is built
-  - After fixing a bug or resolving a failing test
-  - After updating documentation
+  - After each new feature is built and tests pass
+  - After fixing a bug (include the regression test in the same commit)
+  - After schema or dependency changes
 - Write descriptive commit messages explaining *what* and *why*.
-- Never commit large binary files, downloaded data, or API keys.
-
----
-
-## Data Handling
-
-- **Append-only data.** Append new records rather than overwriting. Deduplicate via unique keys.
-- **Source attribution.** Every data record must include its origin (source URL, connector name, etc.). Users must be able to trace data back to its source.
-- **Defensive optional field handling.** Null-check every optional field before rendering or processing.
-- Null values show explicit placeholders ("N/A", "TBD", "Value TBD") — never blank UI elements or missing fields.
+- Never commit `node_modules/`, `.next/`, `.env.local`, or Prisma migration conflicts.
 
 ---
 
@@ -100,7 +164,7 @@ Maintain a living `issues.md` in the project root as an audit trail.
 
 - Log bugs with: date, module/area, description, root cause (**code bug** vs. **test bug**), and status (Open / Fixed).
 - Update entries when resolved: what the fix was + the commit that resolved it.
-- After every bug fix, check whether a new regression test is needed.
+- **After every bug fix, add a regression test** that would have caught the bug, and reference it in `issues.md`.
 
 ---
 
@@ -114,67 +178,11 @@ Maintain a `backlog.md` for ideas, features, and enhancements.
 
 ---
 
-## Python Standards
-
-*(Apply when the project uses Python)*
-
-- Type hints on all functions.
-- Use `pathlib.Path` for file paths.
-- Use the `logging` module — no bare `print` for runtime output.
-- All constants in a single config module.
-- Pin dependencies in `requirements.txt`.
-- Use Pydantic for data validation.
-- Python 3.9+ compatible unless specified otherwise.
-
----
-
-## Frontend Standards
-
-*(Apply when the project has a web frontend)*
-
-- Functional components + hooks only. No class components.
-- Colors, enums, and constants in a dedicated constants file — never hardcoded inline.
-- Data transforms belong in hooks or utility functions, not in components.
-- Proper loading, error, and empty states on every view.
-- All interactive elements must have visible focus indicators for accessibility.
-- **Mobile-first responsive design.** All features must work on both mobile and desktop.
-- Use TypeScript strict mode when the project uses TypeScript. No `any` types.
-
----
-
-## Network Ethics & Rate Limiting
-
-*(Apply when the project fetches from external sources)*
-
-- Minimum 1.5–2s delay between requests to any single host.
-- Set an informative `User-Agent` header.
-- Handle 429 responses with exponential backoff (start at 10s).
-- Cache all fetched content to disk. Re-runs should never re-download already-cached content.
-- If a service persistently blocks after retries, log to `issues.md` and gracefully skip. Never crash.
-- Start small when testing scrapers — validate against a handful of pages before scaling to full runs.
-
----
-
-## AI/API Cost Optimization
-
-*(Apply when the project uses LLM APIs)*
-
-- Use the cheapest model that meets quality requirements by default (e.g., Haiku before Opus).
-- Apply keyword pre-filtering to skip irrelevant content before sending to expensive APIs.
-- Truncate/excerpt input text to reduce token usage.
-- Cache API responses by content hash. Never re-classify identical content.
-- Log cost impact at each optimization layer. Print a cost summary at the end of each run.
-- `--dry-run` and `--fetch-only` modes must work without an API key.
-
----
-
 ## Working with AI Agents
 
-*Meta-principles for getting the most out of AI-assisted development.*
-
 - **Context engineering over prompt engineering.** Fill the context window with exactly what's needed — no more, no less. Watch for three failure modes: *context poisoning* (early errors that compound), *context distraction* (irrelevant content that buries what matters), and *context clash* (contradictory instructions).
-- **Start fresh on topic switches.** Use `/clear` when moving to an unrelated problem. Long mixed-topic contexts degrade quality. Break complex tasks into small steps and commit between them.
+- **Start fresh on topic switches.** Use `/clear` when moving to an unrelated problem. Break complex tasks into small steps and commit between them.
 - **AI has no taste.** Actively review output for: excessive try/catch blocks, unnecessary abstractions, code bloat instead of refactoring, and poor judgment on simplicity vs. structure. These are recurring failure modes that require human correction.
-- **Closed-loop validation.** Build projects so the agent can compile, lint, run tests, and verify its own output without human intervention. When the agent can close the loop itself, you can trust the result.
-- **Keep this file current.** When something unexpected happens — a pattern that failed, a correct CLI invocation, a library quirk — add a concise note here. This file should grow incrementally as organizational scar tissue, not be rewritten from scratch.
-- **Write big plans to files.** For large tasks, write the spec to a `docs/` markdown file and review it before executing. This persists context across sessions and allows a second-opinion review before building.
+- **Closed-loop validation.** After implementing, always run `npm run build` and `npm run lint` (and `npm run test:run` once tests exist) to verify the output without human intervention.
+- **Keep this file current.** When something unexpected happens — a pattern that failed, a correct CLI invocation, a library quirk — add a concise note here. This file should grow incrementally as organizational scar tissue.
+- **Write big plans to files.** For large tasks, write the spec to a `docs/` markdown file and review it before executing.
