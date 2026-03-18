@@ -143,6 +143,7 @@ npm run test:run      # All tests — must pass before committing
 - Never log session tokens or user passwords.
 - Always `.gitignore`: `.env`, `.env.local`, `credentials.json`, `secrets/`, `node_modules/`, `.next/`, `*.pyc`.
 - Before committing: `git diff --cached | grep -iE "apikey|password|token|secret"`.
+- **Before pushing to a remote**, audit the full commit history for leaked secrets: `git log --all -p | grep -iE "sk-|apikey|password|token|secret|DATABASE_URL|AUTH_SECRET"`. If secrets are found in history, remove them with `git filter-repo` or `BFG Repo-Cleaner` before pushing. **Never push to GitHub without verifying the entire history is clean.**
 - **Password hashing.** Use `bcryptjs` (already a dependency). Never store plaintext passwords.
 
 ---
