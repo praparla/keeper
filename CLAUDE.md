@@ -187,3 +187,37 @@ Maintain a `backlog.md` for ideas, features, and enhancements.
 - **Closed-loop validation.** After implementing, always run `npm run build` and `npm run lint` (and `npm run test:run` once tests exist) to verify the output without human intervention.
 - **Keep this file current.** When something unexpected happens — a pattern that failed, a correct CLI invocation, a library quirk — add a concise note here. This file should grow incrementally as organizational scar tissue.
 - **Write big plans to files.** For large tasks, write the spec to a `docs/` markdown file and review it before executing.
+
+---
+
+## Railway Deployment
+
+**Hosted at:** `keeper-production-a8ea.up.railway.app`
+**Railway project:** `modest-warmth` · GitHub auto-deploy from `praparla/keeper` (main branch)
+**Region:** europe-west4-drams3a
+
+### How deploys work
+- Every `git push origin main` triggers an auto-deploy on Railway.
+- Build pipeline: `prisma db push` → `tsx prisma/seed.ts` → `next build` (see `package.json` "build" script).
+- The seed is idempotent (uses `upsert` for users, `deleteMany` + `create` for vital info).
+
+### Environment variables (set on Railway, not in code)
+- `DATABASE_URL` — references `${{Postgres.DATABASE_URL}}` (internal hostname, used at **runtime**)
+- `DATABASE_PUBLIC_URL` — references `${{Postgres.DATABASE_PUBLIC_URL}}` (public proxy, used at **build time**)
+- `AUTH_SECRET` — generated with `openssl rand -base64 32`
+
+### Critical: build-time vs runtime DB access
+Railway's private network (`*.railway.internal`) is **not available during builds**. Any Prisma command in the build script must use the public URL:
+```
+"build": "DATABASE_URL=$DATABASE_PUBLIC_URL prisma db push && DATABASE_URL=$DATABASE_PUBLIC_URL tsx prisma/seed.ts && next build"
+```
+At runtime, `DATABASE_URL` automatically uses the fast internal connection.
+
+### Switching from SQLite to PostgreSQL
+When migrating the Prisma datasource:
+1. Change `provider` to `"postgresql"` and `url` to `env("DATABASE_URL")` in `prisma/schema.prisma`.
+2. No schema changes needed — Prisma's SQLite and PostgreSQL schemas are compatible for this project's types.
+3. The `prisma db push` in the build script creates all tables on first deploy.
+
+### Current auth state (as of 2026-03-18)
+Auth is **bypassed** via `src/lib/dev-user.ts` which hardcodes `pranava@family.dev`. The production DB must have this user seeded or the dashboard will crash. Real auth (Google OAuth + SMS OTP) is a backlog item.
