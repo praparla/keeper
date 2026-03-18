@@ -58,7 +58,7 @@ export function VitalInfoClient({ items }: { items: VitalInfo[] }) {
         {items.length === 0 ? (
           <EmptyState
             icon={Heart}
-            message="No vital info yet. Run npm run db:seed to get started."
+            message="No health info yet. Add medications, allergies, and more to keep your family informed."
           />
         ) : (
           items.map((item) => (

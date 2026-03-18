@@ -7,6 +7,15 @@
 
 ## High Priority
 
+- [ ] **Web Hosting** · `M`
+  Deploy to production web hosting. **Recommended: Railway Hobby ($5/month)** — container-based (no serverless cold starts or function timeouts), includes managed Postgres within the $5 credit, excellent Next.js DX, no vendor lock-in. Alternative: Vercel Hobby (free, personal/non-commercial use only per ToS) + Neon free tier (0.5 GB, auto-suspends between queries — 100–500ms cold start on first query after idle). Steps: push to GitHub → connect Railway → provision Railway Postgres → set `DATABASE_URL`, `AUTH_SECRET`, and OAuth credentials as environment variables → deploy. Do not use Vercel for commercial use; use Railway or upgrade to Vercel Pro ($20/month) if revenue-generating.
+
+- [ ] **iOS App Store Distribution** · `XL`
+  Ship Keeper to the iOS App Store. **Recommended approach: Capacitor (load from remote hosted URL).** Capacitor wraps the existing Next.js web app in a native WebView — ~90% code reuse. Loading from the hosted domain (not local static bundle) means cookie-based NextAuth v5 sessions work identically to the browser with zero auth changes. Key constraints: Server Actions don't execute in the Capacitor shell (they're server-side); mutations must go through explicit API routes (`src/app/api/`) alongside existing Server Actions. Steps: (1) `npm install @capacitor/core @capacitor/cli @capacitor/ios`; (2) set `server.url` in `capacitor.config.ts` to hosted domain; (3) add Capacitor plugins for push notifications and secure storage; (4) enroll in Apple Developer Program ($99/year, required); (5) submit via Xcode + App Store Connect. **Long-term path:** if native feel becomes critical (scroll physics, animations), migrate to a Solito monorepo (Next.js web + Expo React Native mobile sharing hooks/types/business logic — but UI components are written twice). Avoid full Swift rewrite — zero code reuse, expensive.
+  - Auth note: With Capacitor + remote URL, no auth changes needed. If ever moving to a true native React Native build, add a `/api/mobile-token` endpoint that issues a short-lived JWT (15 min) from the existing NextAuth session; store it in iOS Keychain via `capacitor-secure-storage-plugin`. Never store tokens in `localStorage`.
+  - Security note: iOS app hits the Next.js server (Railway/Vercel) via HTTPS — never expose `DATABASE_URL` or a raw DB connection. Rate-limit auth endpoints even at small scale.
+  - Cost summary at <50 users: Railway $5/month + Apple Developer $99/year ≈ **~$13/month all-in**.
+
 - [ ] **Deployment** · `M`
   Push to GitHub, connect to Vercel. Provision Vercel Postgres and update `DATABASE_URL`.
 
@@ -18,6 +27,12 @@
 
 - [ ] **Notifications — Real Integrations** · `M`
   Replace `lib/notifications.ts` console logs with actual Resend (email) and Twilio (SMS). Batch non-urgent task updates into a morning digest (8am) rather than firing on every change. Medical/urgent tasks notify immediately.
+
+- [ ] **Server Action Input Validation** · `S`
+  Add zod schemas for all Server Action inputs (`createTask`, `updateTask`, `upsertVitalInfo`, `updateProfile`). Currently accepting raw unvalidated input from clients. *Found in UAT 2026-03-18.*
+
+- [ ] **Loading & Error States for All Routes** · `S`
+  Add `loading.tsx`, `error.tsx`, and `not-found.tsx` to each route group under `(app)/`. Currently no visual feedback during navigation or error recovery. *Found in UAT 2026-03-18.*
 
 ---
 
@@ -51,6 +66,15 @@
 - [x] **Warm Off-White / Soft Teal Design Pass** · `S` *(Done: oklch warm off-white bg + soft teal primary in globals.css)*
 
 - [x] **Empty States on Every View** · `S` *(Done: reusable EmptyState component with icons + CTAs on dashboard and vital-info)*
+
+- [ ] **Add New Vital Info Category** · `S`
+  Add an "Add Category" button to the Health Info page so users can create new vital info entries beyond the seeded set. Currently the only way to add categories is via database seed. *Found in UAT 2026-03-18.*
+
+- [ ] **Confirmation Dialog for Destructive Actions** · `S`
+  Replace `window.confirm()` with a styled Radix AlertDialog for task deletion. The native browser confirm looks out of place on mobile and doesn't match the app's design language. *Found in UAT 2026-03-18.*
+
+- [ ] **Doctor's Brief Includes Vital Info** · `S`
+  Current CSV export only includes Medical-type tasks. Add vital info (medications, allergies, doctors) to the Doctor's Brief export for a complete picture. *Found in UAT 2026-03-18.*
 
 ---
 

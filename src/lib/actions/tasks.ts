@@ -4,8 +4,31 @@ import { prisma } from "@/lib/db";
 import { getDevUserId } from "@/lib/dev-user";
 import { revalidatePath } from "next/cache";
 import { TaskType, TaskStatus } from "@prisma/client";
+import { z } from "zod";
 
 // TODO: Replace DEV_USER with real auth session throughout this file
+
+const TASK_TYPES: [string, ...string[]] = ["Note", "Medical", "Household", "Errand"];
+const TASK_STATUSES: [string, ...string[]] = ["Open", "InProgress", "Resolved"];
+
+const createTaskSchema = z.object({
+  title: z.string().min(1, "Title is required").max(500),
+  description: z.string().max(5000).optional(),
+  type: z.enum(TASK_TYPES).optional().default("Note"),
+  dueDate: z.string().refine((v) => !v || !isNaN(Date.parse(v)), "Invalid date").optional(),
+  assigneeId: z.string().optional(),
+});
+
+const updateTaskSchema = z.object({
+  title: z.string().min(1).max(500).optional(),
+  description: z.string().max(5000).optional(),
+  type: z.enum(TASK_TYPES).optional(),
+  status: z.enum(TASK_STATUSES).optional(),
+  dueDate: z.string().refine((v) => !v || !isNaN(Date.parse(v)), "Invalid date").nullable().optional(),
+  assigneeId: z.string().nullable().optional(),
+});
+
+const idSchema = z.string().min(1, "ID is required");
 
 export async function getTasks(status?: TaskStatus) {
   const where = status ? { status } : {};
@@ -17,8 +40,9 @@ export async function getTasks(status?: TaskStatus) {
 }
 
 export async function getTaskById(id: string) {
+  const validId = idSchema.parse(id);
   return prisma.task.findUnique({
-    where: { id },
+    where: { id: validId },
     include: { assignee: true, creator: true },
   });
 }
@@ -30,15 +54,16 @@ export async function createTask(data: {
   dueDate?: string;
   assigneeId?: string;
 }) {
+  const validated = createTaskSchema.parse(data);
   const userId = await getDevUserId();
 
   const task = await prisma.task.create({
     data: {
-      title: data.title,
-      description: data.description || null,
-      type: data.type || "Note",
-      dueDate: data.dueDate ? new Date(data.dueDate) : null,
-      assigneeId: data.assigneeId || null,
+      title: validated.title,
+      description: validated.description || null,
+      type: validated.type as TaskType,
+      dueDate: validated.dueDate ? new Date(validated.dueDate) : null,
+      assigneeId: validated.assigneeId || null,
       creatorId: userId,
     },
   });
@@ -58,17 +83,20 @@ export async function updateTask(
     assigneeId?: string | null;
   }
 ) {
+  const validId = idSchema.parse(id);
+  const validated = updateTaskSchema.parse(data);
+
   const updateData: Record<string, unknown> = {};
-  if (data.title !== undefined) updateData.title = data.title;
-  if (data.description !== undefined) updateData.description = data.description;
-  if (data.type !== undefined) updateData.type = data.type;
-  if (data.status !== undefined) updateData.status = data.status;
-  if (data.dueDate !== undefined)
-    updateData.dueDate = data.dueDate ? new Date(data.dueDate) : null;
-  if (data.assigneeId !== undefined) updateData.assigneeId = data.assigneeId;
+  if (validated.title !== undefined) updateData.title = validated.title;
+  if (validated.description !== undefined) updateData.description = validated.description;
+  if (validated.type !== undefined) updateData.type = validated.type;
+  if (validated.status !== undefined) updateData.status = validated.status;
+  if (validated.dueDate !== undefined)
+    updateData.dueDate = validated.dueDate ? new Date(validated.dueDate) : null;
+  if (validated.assigneeId !== undefined) updateData.assigneeId = validated.assigneeId;
 
   const task = await prisma.task.update({
-    where: { id },
+    where: { id: validId },
     data: updateData,
   });
 
@@ -77,15 +105,17 @@ export async function updateTask(
 }
 
 export async function deleteTask(id: string) {
-  await prisma.task.delete({ where: { id } });
+  const validId = idSchema.parse(id);
+  await prisma.task.delete({ where: { id: validId } });
   revalidatePath("/dashboard");
 }
 
 export async function assignTaskToMe(taskId: string) {
+  const validId = idSchema.parse(taskId);
   const userId = await getDevUserId();
 
   const task = await prisma.task.update({
-    where: { id: taskId },
+    where: { id: validId },
     data: {
       assigneeId: userId,
       status: "InProgress",
@@ -98,8 +128,9 @@ export async function assignTaskToMe(taskId: string) {
 }
 
 export async function resolveTask(taskId: string) {
+  const validId = idSchema.parse(taskId);
   const task = await prisma.task.update({
-    where: { id: taskId },
+    where: { id: validId },
     data: { status: "Resolved" },
   });
 
