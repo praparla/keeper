@@ -8,6 +8,13 @@ ALTER TABLE "User"
   ADD COLUMN "immediateEmail" BOOLEAN NOT NULL DEFAULT true,
   ADD COLUMN "weeklyEmail" BOOLEAN NOT NULL DEFAULT true;
 
+-- Backfill from the legacy email opt-out so a user who previously disabled
+-- reminders isn't silently re-subscribed to all three new channels.
+UPDATE "User" SET
+  "digestEmail" = "emailReminders",
+  "immediateEmail" = "emailReminders",
+  "weeklyEmail" = "emailReminders";
+
 CREATE TABLE "AuthSession" (
   "id" TEXT NOT NULL,
   "expiresAt" TIMESTAMP(3) NOT NULL,
@@ -85,6 +92,7 @@ CREATE INDEX "AuthSession_userId_idx" ON "AuthSession"("userId");
 CREATE UNIQUE INDEX "AuthAccount_providerId_accountId_key" ON "AuthAccount"("providerId", "accountId");
 CREATE INDEX "AuthAccount_userId_idx" ON "AuthAccount"("userId");
 CREATE INDEX "AuthVerification_identifier_idx" ON "AuthVerification"("identifier");
+CREATE UNIQUE INDEX "Membership_userId_key" ON "Membership"("userId");
 CREATE UNIQUE INDEX "Membership_userId_circleId_key" ON "Membership"("userId", "circleId");
 CREATE INDEX "Membership_circleId_idx" ON "Membership"("circleId");
 CREATE UNIQUE INDEX "Invite_token_key" ON "Invite"("token");

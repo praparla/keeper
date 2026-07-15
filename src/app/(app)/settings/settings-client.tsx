@@ -52,6 +52,16 @@ export function SettingsClient({ user, circleName }: { user: UserSettings; circl
     }
   }
 
+  async function handleSignOut() {
+    const { error } = await authClient.signOut();
+    if (error) {
+      console.error("Failed to sign out", error);
+      toast.error("Failed to sign out");
+      return;
+    }
+    window.location.href = "/login";
+  }
+
   return (
     <div>
       <h1 className="mb-1 text-xl font-bold">Settings</h1>
@@ -78,7 +88,7 @@ export function SettingsClient({ user, circleName }: { user: UserSettings; circl
         </Card>
         <Button onClick={handleSave} className="w-full" disabled={saving}>{saving ? "Saving..." : "Save Changes"}</Button>
         <Button variant="outline" className="w-full" onClick={handleInvite}><Link2 className="mr-2 h-4 w-4" />Copy family invite</Button>
-        <Button variant="outline" className="w-full" onClick={() => authClient.signOut({ fetchOptions: { onSuccess: () => { window.location.href = "/login"; } } })}>
+        <Button variant="outline" className="w-full" onClick={handleSignOut}>
           <LogOut className="mr-2 h-4 w-4" />Sign Out
         </Button>
       </div>

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { headers } from "next/headers";
@@ -16,9 +17,9 @@ export class AuthorizationError extends Error {
   }
 }
 
-export async function getRequestSession() {
+export const getRequestSession = cache(async () => {
   return auth.api.getSession({ headers: await headers() });
-}
+});
 
 export async function requireUser() {
   const session = await getRequestSession();
@@ -26,13 +27,13 @@ export async function requireUser() {
   return session.user;
 }
 
-export async function getMembership(userId: string) {
+export const getMembership = cache(async (userId: string) => {
   return prisma.membership.findFirst({
     where: { userId },
     include: { circle: true },
     orderBy: { joinedAt: "asc" },
   });
-}
+});
 
 export async function requireCircleContext() {
   const user = await requireUser();

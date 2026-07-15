@@ -72,3 +72,59 @@ were consumed directly — zero follow-up messages to any agent.
   (`<!-- SPEC-CONTINUES-SECTION-N -->`), then fill sections via targeted `Edit` replacements
   as background research lands. Avoids one giant fragile write and lets drafting overlap
   with research.
+
+---
+
+## 2026-07-15 — `/code-review` of PR #1 (M0 foundations diff)
+
+**Session shape:** ran `/code-review` at its default "high effort" preset against the full
+PR #1 diff (42 files, ~4,810 insertions / 1,030 deletions — Better Auth migration, circle
+tenancy, invite flow, Prisma schema/migrations, CI). The preset's 8-finder-angle fan-out
+launched all 8 in parallel with no size-down. User interrupted mid-run: *"This is wayyy too
+many agents holy shit... 8 agents at 100K tokens each and climbing is way overkill."*
+
+| Agent | Purpose | Tokens | Tool uses | Wall time | Verdict |
+|---|---|---:|---:|---:|---|
+| Correctness (angle A) | Line-by-line diff scan | 153,887 | 25 | 6.2 min | Good — 3 real findings (open redirect, missing catch, baseURL fallback) |
+| Removed-behavior (angle B) | What invariants got dropped | 135,247 | 19 | 4.8 min | Good — 3 real findings incl. the notification-migration bug |
+| Cross-file tracer (angle C) | Callers of changed exports | 145,346 | 44 | 6.9 min | Good — found the unhandled-throw regression in task-card.tsx |
+| Reuse | Duplicated logic | 118,779 | 15 | 3.0 min | Redundant — rediscovered the same requireCircleContext/session-guard duplication as Altitude and Efficiency |
+| Simplification | Unneeded complexity | 95,043 | 18 | 2.1 min | Low value — minor type/duplication nits, nothing acted on |
+| Efficiency | Wasted work | 106,345 | 14 | 2.2 min | Useful — surfaced the double requireCircleContext() call (layout + page), acted on |
+| Altitude | Shallow fixes / special cases | 125,371 | 15 | 3.1 min | Redundant — same duplication theme as Reuse, plus one real migration-hardcoding note (not acted on) |
+| Conventions (CLAUDE.md) | Rule violations | 118,584 | 14 | 2.2 min | Good — 1 real finding (circle.ts has zero tests), the one thing this angle exists for |
+| **Total** | | **~998,600** | **164** | **~7 min** (parallel) | |
+
+**Result quality**
+
+Of 10 findings actually acted on (open redirect, notification-migration backfill, createCircle
+race + new DB constraint, task-card.tsx unhandled throws, missing error boundaries + invite
+membership check, zero test coverage on circle.ts, sign-out swallowed failure, auth.ts baseURL
+fallback, redundant per-page auth lookup), every one traces back to angles A, B, C, Efficiency,
+or Conventions. **Reuse and Altitude's 11 combined findings mostly re-described the same
+"session+membership guard duplicated across layout/pages/routes" root cause already caught by
+Efficiency** — real convergent validation, but 3 angles paying full price (~350K tokens) to
+say the same thing once. Simplification's 6 findings (duplicate zod schemas, useState sprawl,
+try/catch boilerplate) were legitimate but low-stakes; none were acted on this pass.
+
+**Token efficiency — this run was oversized, and it was a repeat of a documented mistake**
+
+- `~/Projects/coding-best-practices/PROMPTING.md` already logs the *identical* failure mode
+  from a prior session: an 8-angle review on an 11-file diff cost ~980K tokens across 14 calls
+  with 3 of 8 angles rediscovering the same two bugs. That guidance existed but had never been
+  pulled into Keeper's own `CLAUDE.md`, so it wasn't applied here — now fixed (see
+  `CLAUDE.md` → "Working with AI Agents").
+- Even accounting for PR #1 being a genuinely large diff (unlike the 11-file case), a leaner
+  4-angle run — correctness, removed-behavior, cross-file/auth, conventions — would very
+  likely have caught the same 10 real findings for ~450–550K tokens instead of ~1M, since
+  those are exactly the 4 angles every acted-on finding came from.
+- **What to repeat:** skipping the skill's separate 1-vote-per-finding verify-agent pass and
+  instead spot-checking the top 2 highest-severity findings by reading the flagged code
+  directly. Both confirmed as real bugs at near-zero marginal cost, versus spinning up ~10
+  more verify agents.
+- **What to change next time:** before invoking `/code-review` at "high" or above, size the
+  angle count to the diff explicitly (2–4 angles unless the change is architectural and
+  touches auth/money/data-loss across many files) rather than accepting the preset's flat
+  default. Cap fan-out width at 2–3 *concurrent* launches regardless of total angle count —
+  launching all 8 simultaneously was itself the thing that read as "out of control" even
+  before token cost entered into it.

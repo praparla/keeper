@@ -1,19 +1,10 @@
 # Keeper — Issues Log
 
-_Last updated: 2026-03-18_
+_Last updated: 2026-07-15_
 
 ---
 
 ## Open Issues
-
-### [UAT-001] Dashboard tasks not filtered by family — shows all tasks globally
-- **Severity**: high
-- **Page/Section**: `/dashboard`
-- **Discovered**: 2026-03-18
-- **Status**: open
-- **Description**: Dashboard queries `prisma.task.findMany` without any family/household filter. All tasks from all users are shown globally. When multi-family support or real auth is added, users will see tasks from unrelated families. The current `where: { status: { not: "Resolved" } }` has no user/family scoping.
-- **Steps to Reproduce**: Check `src/app/(app)/dashboard/page.tsx` lines 11-22.
-- **Fix**: _(pending — blocked on auth implementation)_
 
 ### [UAT-002] Vital Info page has no way to add new categories
 - **Severity**: high
@@ -36,6 +27,87 @@ _Last updated: 2026-03-18_
 ---
 
 ## Resolved Issues
+
+### [CR-001] Notification-preference migration didn't backfill legacy opt-outs
+- **Severity**: high
+- **Page/Section**: `prisma/migrations/20260715000100_m0_expand/migration.sql`
+- **Discovered**: 2026-07-15 (code review of PR #1)
+- **Resolved**: 2026-07-15
+- **Status**: resolved — **code bug**
+- **Description**: New `digestEmail`/`immediateEmail`/`weeklyEmail` columns defaulted to `true` with no backfill from the legacy `emailReminders` value they replace. A user who had previously opted out would be silently re-subscribed after migration.
+- **Fix**: Added an `UPDATE` statement backfilling all three columns from `emailReminders` in the same migration.
+
+### [CR-002] Open redirect via backslash-prefixed callbackUrl
+- **Severity**: high
+- **Page/Section**: `src/app/login/page.tsx`
+- **Discovered**: 2026-07-15 (code review of PR #1)
+- **Resolved**: 2026-07-15
+- **Status**: resolved — **code bug**
+- **Description**: The callback-URL guard only blocked a literal `//` prefix. A `/\evil.com` payload passes the check and browsers commonly normalize a leading `/\` to `//`, turning the post-OAuth redirect into a protocol-relative jump off-site.
+- **Fix**: Replaced the string-prefix check with `/^\/(?!\/|\\)/`, which rejects both `//` and `/\` prefixes.
+
+### [CR-003] createCircle had no protection against a concurrent double-submit
+- **Severity**: high
+- **Page/Section**: `src/lib/actions/circle.ts`
+- **Discovered**: 2026-07-15 (code review of PR #1)
+- **Resolved**: 2026-07-15
+- **Status**: resolved — **code bug**
+- **Description**: The duplicate-membership guard was read-then-write with no unique constraint or transaction. A double-tapped onboarding submit could create two circles for one user.
+- **Fix**: Added `@@unique` (via a unique `userId` field) on `Membership` at the DB level and made `createCircle` catch the resulting `P2002` conflict instead of racing on an application-level read.
+
+### [CR-004] Task-card assign/resolve actions had no error handling
+- **Severity**: medium
+- **Page/Section**: `src/components/task-card.tsx`
+- **Discovered**: 2026-07-15 (code review of PR #1)
+- **Resolved**: 2026-07-15
+- **Status**: resolved — **code bug**
+- **Description**: `assignTaskToMe`/`resolveTask` started throwing `AuthenticationError`/`AuthorizationError` in this PR, but the button handlers and swipe gesture had no try/catch — a stale session or revoked membership caused a silent no-op with no user feedback.
+- **Fix**: Wrapped both handlers in try/catch with `toast.error` on failure.
+
+### [CR-005] Onboarding/invite forms had no error boundary; invite page skipped the membership check
+- **Severity**: medium
+- **Page/Section**: `src/app/onboarding/`, `src/app/invite/[token]/`
+- **Discovered**: 2026-07-15 (code review of PR #1)
+- **Resolved**: 2026-07-15
+- **Status**: resolved — **code bug**
+- **Description**: `createCircle`/`acceptInvite` throw on invalid input or an expired/claimed invite, but neither route had an `error.tsx`, so failures hit Next's raw default error page. Separately, the invite page never checked whether the visiting user already had a membership, unlike every other guarded route.
+- **Fix**: Added `src/app/onboarding/error.tsx` and `src/app/invite/error.tsx`, and added the same `getMembership` redirect-if-already-a-member guard used by `/onboarding`.
+
+### [CR-006] `circle.ts` had zero test coverage
+- **Severity**: medium
+- **Page/Section**: `src/lib/actions/circle.ts`
+- **Discovered**: 2026-07-15 (code review of PR #1)
+- **Resolved**: 2026-07-15
+- **Status**: resolved — **test bug** (CLAUDE.md requires a happy-path + error-path test per new Server Action)
+- **Description**: `createCircle`, `createInvite`, and `acceptInvite` — the most security-sensitive new code in PR #1 (invite token validation, expiry, double-claim prevention) — shipped with no tests.
+- **Fix**: Added `src/lib/actions/circle.test.ts` covering happy-path and error-path cases for all three actions.
+
+### [CR-007] Sign-out button silently swallowed failures
+- **Severity**: low
+- **Page/Section**: `src/app/(app)/settings/settings-client.tsx`
+- **Discovered**: 2026-07-15 (code review of PR #1)
+- **Resolved**: 2026-07-15
+- **Status**: resolved — **code bug**
+- **Description**: The sign-out button had no error handling, unlike every other handler in the same file — a failed sign-out (offline, 5xx) looked like the button did nothing.
+- **Fix**: Added an explicit `{ error }` check on `authClient.signOut()`'s result (it resolves rather than throws) with a `toast.error` on failure.
+
+### [CR-008] `auth.ts` baseURL had no fallback, unlike the invite-link builder
+- **Severity**: low
+- **Page/Section**: `src/lib/auth.ts`
+- **Discovered**: 2026-07-15 (code review of PR #1)
+- **Resolved**: 2026-07-15
+- **Status**: resolved — **code bug**
+- **Description**: `baseURL` was sourced only from `BETTER_AUTH_URL`, while `circle.ts`'s invite-link builder falls back through `BETTER_AUTH_URL ?? NEXT_PUBLIC_APP_URL`. A deploy that only sets one of the two env vars would see OAuth fail while invite links still worked, making the bug look environment-specific.
+- **Fix**: Matched the same fallback chain in `auth.ts`.
+
+### [UAT-001] Dashboard tasks not filtered by family — shows all tasks globally
+- **Severity**: high
+- **Page/Section**: `/dashboard`
+- **Discovered**: 2026-03-18
+- **Resolved**: 2026-07-15
+- **Status**: resolved
+- **Description**: Dashboard queried `prisma.task.findMany` without any family/household filter.
+- **Fix**: PR #1's circle tenancy work scopes every dashboard query by `circleId` via `requireCircleContext()`.
 
 ### [UAT-003] Empty state on Vital Info shows developer-facing text
 - **Severity**: low

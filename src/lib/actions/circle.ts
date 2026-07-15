@@ -1,6 +1,7 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { AuthorizationError, getMembership, requireCircleContext, requireUser } from "@/lib/access";
 import { redirect } from "next/navigation";
@@ -15,9 +16,17 @@ export async function createCircle(formData: FormData) {
   if (existing) redirect("/dashboard");
   const name = circleNameSchema.parse(formData.get("name"));
 
-  await prisma.careCircle.create({
-    data: { name, members: { create: { userId: user.id, role: "OWNER" } } },
-  });
+  try {
+    await prisma.careCircle.create({
+      data: { name, members: { create: { userId: user.id, role: "OWNER" } } },
+    });
+  } catch (error) {
+    // Membership.userId is unique, so a double-submit that races this check
+    // fails here instead of creating two circles for the same user.
+    const isDuplicateMembership =
+      error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+    if (!isDuplicateMembership) throw error;
+  }
   redirect("/dashboard");
 }
 

@@ -44,15 +44,25 @@ export function TaskCard({
   const swipeAction = !task.assigneeId ? "assign" : "resolve";
 
   async function handleAssign() {
-    const updated = await assignTaskToMe(task.id);
-    toast.success(
-      `${(updated.assignee as { name: string | null })?.name ?? "You"} is on it!`
-    );
+    try {
+      const updated = await assignTaskToMe(task.id);
+      toast.success(
+        `${(updated.assignee as { name: string | null })?.name ?? "You"} is on it!`
+      );
+    } catch (error) {
+      console.error("Failed to assign task", error);
+      toast.error("Couldn't assign this task");
+    }
   }
 
   async function handleResolve() {
-    await resolveTask(task.id);
-    toast.success("Task resolved!");
+    try {
+      await resolveTask(task.id);
+      toast.success("Task resolved!");
+    } catch (error) {
+      console.error("Failed to resolve task", error);
+      toast.error("Couldn't resolve this task");
+    }
   }
 
   const onTouchStart = useCallback((e: React.TouchEvent) => {
