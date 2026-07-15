@@ -4,7 +4,16 @@ import { useState } from "react";
 import { VitalInfo } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { upsertVitalInfo } from "@/lib/actions/vital-info";
 import { toast } from "sonner";
 import {
@@ -15,6 +24,7 @@ import {
   Phone,
   Heart,
   Edit2,
+  Plus,
   Save,
   X,
 } from "lucide-react";
@@ -31,6 +41,10 @@ const categoryIcons: Record<string, React.ReactNode> = {
 export function VitalInfoClient({ items }: { items: VitalInfo[] }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [newCategory, setNewCategory] = useState("");
+  const [newContent, setNewContent] = useState("");
+  const [adding, setAdding] = useState(false);
 
   function startEdit(item: VitalInfo) {
     setEditingId(item.id);
@@ -47,12 +61,77 @@ export function VitalInfoClient({ items }: { items: VitalInfo[] }) {
     }
   }
 
+  async function handleAddCategory(e: React.FormEvent) {
+    e.preventDefault();
+    const category = newCategory.trim();
+    if (!category) return;
+
+    setAdding(true);
+    try {
+      await upsertVitalInfo(category, newContent.trim());
+      toast.success("Category added!");
+      setAddOpen(false);
+      setNewCategory("");
+      setNewContent("");
+    } catch {
+      toast.error("Failed to add category");
+    } finally {
+      setAdding(false);
+    }
+  }
+
   return (
     <div>
-      <h1 className="text-xl font-bold mb-1">Health Info</h1>
-      <p className="text-sm text-muted-foreground mb-4">
-        Medications, allergies, doctors & more
-      </p>
+      <div className="mb-4 flex items-start justify-between gap-2">
+        <div>
+          <h1 className="text-xl font-bold mb-1">Health Info</h1>
+          <p className="text-sm text-muted-foreground">
+            Medications, allergies, doctors & more
+          </p>
+        </div>
+        <Button size="sm" variant="outline" onClick={() => setAddOpen(true)}>
+          <Plus className="h-4 w-4 mr-1" />
+          Add Category
+        </Button>
+      </div>
+
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add health info category</DialogTitle>
+            <DialogDescription>
+              Create a new category, like &ldquo;Pharmacy&rdquo; or &ldquo;Advance Directive&rdquo;.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleAddCategory} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-category-name">
+                Category name <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="new-category-name"
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                autoFocus
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-category-content">Details</Label>
+              <Textarea
+                id="new-category-content"
+                value={newContent}
+                onChange={(e) => setNewContent(e.target.value)}
+                rows={4}
+                placeholder="Optional — you can fill this in later"
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={adding}>
+              {adding ? "Adding..." : "Add Category"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <div className="space-y-4">
         {items.length === 0 ? (

@@ -1,21 +1,40 @@
 import { prisma } from "@/lib/db";
-import { getMembership, getRequestSession } from "@/lib/access";
+import { AuthenticationError, AuthorizationError, requireCircleContext } from "@/lib/access";
 import { stringify } from "csv-stringify/sync";
 import { NextResponse } from "next/server";
 
 export async function GET() {
-  const session = await getRequestSession();
-  if (!session?.user?.id) return new NextResponse("Unauthorized", { status: 401 });
-  const membership = await getMembership(session.user.id);
-  if (!membership) return new NextResponse("Forbidden", { status: 403 });
+  let circleId: string;
+  try {
+    ({ circleId } = await requireCircleContext());
+  } catch (error) {
+    if (error instanceof AuthenticationError) return new NextResponse("Unauthorized", { status: 401 });
+    if (error instanceof AuthorizationError) return new NextResponse("Forbidden", { status: 403 });
+    throw error;
+  }
 
-  const medicalTasks = await prisma.task.findMany({
-    where: { circleId: membership.circleId, type: "Medical" },
-    include: { assignee: true, creator: true },
-    orderBy: { createdAt: "desc" },
-  });
+  const [medicalTasks, vitalInfo] = await Promise.all([
+    prisma.task.findMany({
+      where: { circleId, type: "Medical" },
+      include: { assignee: true, creator: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.vitalInfo.findMany({
+      where: { circleId },
+      orderBy: { category: "asc" },
+    }),
+  ]);
 
-  const csv = stringify(
+  const healthInfoCsv = stringify(
+    vitalInfo.map((info) => ({
+      Category: info.category,
+      Details: info.content,
+      "Last Updated": info.updatedAt.toISOString().split("T")[0],
+    })),
+    { header: true },
+  );
+
+  const medicalTasksCsv = stringify(
     medicalTasks.map((task) => ({
       Title: task.title,
       Description: task.description ?? "N/A",
@@ -27,6 +46,8 @@ export async function GET() {
     })),
     { header: true },
   );
+
+  const csv = `Health Info\n${healthInfoCsv}\nMedical Tasks\n${medicalTasksCsv}`;
 
   return new NextResponse(csv, {
     headers: {

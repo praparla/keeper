@@ -28,8 +28,7 @@
 - [ ] **Deployment** · `M` — *superseded by spec §9.1 (2026-07-14): Vercel yes, but Supabase Postgres (free, pg_cron) rather than Vercel Postgres; full migration runbook in the spec*
   ~~Push to GitHub, connect to Vercel. Provision Vercel Postgres and update `DATABASE_URL`.~~
 
-- [ ] **Authentication** · `L` — *revised by spec §6.1/§9.3 (2026-07-14): Google-only via Better Auth (Auth.js is in maintenance mode); SMS OTP dropped entirely, not built. M0.*
-  Re-enable auth gates (currently bypassed with `DEV_USER`). ~~Configure actual Google Provider client IDs and a real SMS OTP service (e.g., Twilio Verify).~~ Remove `src/lib/dev-user.ts` and restore session checks in all server actions, pages, and API routes. Search for `TODO:` comments to find every bypass point.
+- [x] **Authentication** · `L` *(Done 2026-07-15, PR #1/M0: Better Auth + Google sign-in, `dev-user.ts` removed, `requireUser`/`requireCircleContext` session checks restored across all Server Actions, pages, and the medical-csv route. Production cutover still needs real OAuth credentials + the `docs/m0-runbook.md` acceptance checklist before the Railway bypass is fully retired.)*
 
 - [ ] **Workload Visibility** · `M`
   A quiet "who's done what" summary (past 7 and 30 days): tasks completed, check-ins logged, vitals updated, per family member. No gamification — just data. Addresses the unspoken "I'm doing more than you" tension that 40% of caregiver families report. No competitor app has built this well. *Source: AARP caregiver sibling conflict research.*
@@ -56,8 +55,7 @@
 - [ ] **Recurring Tasks** · `M`
   Toggle on a task for weekly/monthly recurrence (e.g., pill pickup, doctor follow-up). Auto-recreate on completion. Most families have 3–5 recurring care tasks that shouldn't require manual re-entry. *Gap identified in: CareZone shutdown feedback and Reddit caregiving threads.*
 
-- [ ] **Invite via SMS Link** · `M`
-  Invite family members with a single SMS link. Read-only access without requiring account creation. The #1 adoption failure across all competitor apps: one sibling can't get another to sign up. Frictionless read-only join removes this blocker. *Pattern used by: Lotsa Helping Hands for volunteers.*
+- [x] **Invite via Link** · `M` *(Done 2026-07-15, PR #1/M0, reshaped per spec §6.7: single-use, 7-day-expiry invite links via `createInvite`/`acceptInvite`, copied to clipboard from Settings — no SMS sent by the app. Gap vs. spec: link is copied, not pushed through the native share sheet; that polish is still open. No read-only/viewer-role UI yet — the `CircleRole.VIEWER` enum exists in schema but nothing assigns it.)*
 
 - [ ] **Week Calendar View** · `M`
   A native week-view calendar on mobile (not just a list). The single most-cited UI failure in Lotsa Helping Hands reviews is a broken/missing calendar on mobile. Week view as default; month as toggle. Per-person color dots. *Non-negotiable for coordination context.*
@@ -74,14 +72,24 @@
 
 - [x] **Empty States on Every View** · `S` *(Done: reusable EmptyState component with icons + CTAs on dashboard and vital-info)*
 
-- [ ] **Add New Vital Info Category** · `S`
-  Add an "Add Category" button to the Health Info page so users can create new vital info entries beyond the seeded set. Currently the only way to add categories is via database seed. *Found in UAT 2026-03-18.*
+- [x] **Add New Vital Info Category** · `S` *(Done 2026-07-15: "Add Category" dialog on `/vital-info` calling the existing `upsertVitalInfo` upsert — see `vital-info-client.tsx`.)*
 
-- [ ] **Confirmation Dialog for Destructive Actions** · `S`
-  Replace `window.confirm()` with a styled Radix AlertDialog for task deletion. The native browser confirm looks out of place on mobile and doesn't match the app's design language. *Found in UAT 2026-03-18.*
+- [x] **Confirmation Dialog for Destructive Actions** · `S` *(Done 2026-07-15: `window.confirm()` replaced with a Radix `AlertDialog` in `edit-task-dialog.tsx`; new shared `src/components/ui/alert-dialog.tsx`.)*
 
-- [ ] **Doctor's Brief Includes Vital Info** · `S`
-  Current CSV export only includes Medical-type tasks. Add vital info (medications, allergies, doctors) to the Doctor's Brief export for a complete picture. *Found in UAT 2026-03-18.*
+- [x] **Doctor's Brief Includes Vital Info** · `S` *(Done 2026-07-15: `/api/export/medical-csv` now includes a Health Info section alongside Medical Tasks.)*
+
+---
+
+## Deferred cleanup (from 2026-07-15 code review of PR #1)
+
+Real but low-stakes findings from the M0 code review, deliberately not fixed alongside the
+correctness/security bugs to keep that pass proportionate to the diff:
+
+- [ ] **Atomic task mutations** · `S` — `updateTask`/`deleteTask`/`assignTaskToMe`/`resolveTask` in `src/lib/actions/tasks.ts` do a separate ownership-check query before the write instead of one circle-scoped `updateMany`/`deleteMany` with a count check. Safe today (the check still gates access), just two round-trips instead of one on every task mutation.
+- [ ] **Collapse duplicated session+membership guards** · `S` — `src/app/(app)/layout.tsx`, `src/app/api/export/medical-csv/route.ts`, and `src/app/onboarding/page.tsx` each hand-roll the same session-then-membership check with a different failure branch (redirect vs. 401/403). A shared `requireCircleContextOrRedirect()` wrapper in `src/lib/access.ts` would collapse all three.
+- [ ] **De-duplicate zod/type definitions** · `S` — `createTaskSchema`/`updateTaskSchema` in `tasks.ts` and `updateProfileSchema` in `user.ts` have hand-written parameter types that duplicate the zod schema instead of using `z.infer<typeof schema>`; a field added to the schema won't propagate to the type.
+- [ ] **`settings-client.tsx` useState sprawl** · `S` — four separate `useState` calls for fields that are only ever read/written together as one settings object; a single `useState<UserSettings>` would remove the risk of forgetting a field when adding a new toggle.
+- [ ] **Migration hardcodes a single dev circle/email** · `S` — `prisma/migrations/20260715000200_m0_backfill_contract/migration.sql` hardcodes `'m0-family-circle'` and matches ownership by the literal email `pranava@family.dev`. Fine as a one-time M0 cutover script for a single-family DB; would need generalizing if this pattern is ever reused for a multi-cohort migration.
 
 ---
 
