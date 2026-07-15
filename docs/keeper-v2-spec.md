@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| Status | Draft for review |
+| Status | Approved direction; implementation tracked by milestone |
 | Author | Claude (for Pranava) |
 | Date | 2026-07-14 |
 | Scope | Web app v2 (transforms the current deployed v1); iOS path defined but not built |
@@ -199,6 +199,12 @@ Both active personas are busy professionals on phones. Design target is the coor
 
 Priorities follow MoSCoW discipline: **P0** = v2 cannot ship without it; **P1** = fast-follow, designed-for now; **P2** = future, architecture must not preclude it. Acceptance criteria are checklists; every P0 criterion becomes a test.
 
+### Delivery contract
+
+“Implement v2” means completing M0–M4 in order; it is not one atomic release. A milestone is complete only when its code, migration, automated tests, updated operating docs, and UAT evidence are committed together. External-account work (DNS, Google OAuth console, Supabase, Vercel, Resend) is tracked separately from repository work and cannot be marked complete from code alone.
+
+The first implementation pass on this PR is **M0 repository readiness**: test harness, real Google auth, circle-scoped authorization, invite primitives, migration scripts, and deploy-safe build behavior. It does not claim that the external hosting cutover or real-family OAuth acceptance test is complete.
+
 ### 6.1 Authentication & family circle — P0
 
 Real Google sign-in replaces the dev bypass; a `CareCircle` becomes the tenancy boundary (fixes UAT-001's global queries).
@@ -206,6 +212,7 @@ Real Google sign-in replaces the dev bypass; a `CareCircle` becomes the tenancy 
 - [ ] "Continue with Google" is the only visible sign-in path; completes in ≤2 taps on phone and desktop browser. One Tap prompt on return visits where supported (§9.3).
 - [ ] First sign-in with no circle → onboarding (§7.3). First sign-in via invite link → lands inside the inviter's circle.
 - [ ] Every Server Action and page resolves the acting user from the session — never from client input; every query is scoped by the member's circle. `src/lib/dev-user.ts` is deleted; grep for `getDevUserId|DEV_USER|TODO` returns zero hits.
+- [ ] Circle authorization is centralized: reads return only rows in the acting member's circle; writes and deletes use a circle-scoped predicate or a prior ownership lookup in the same transaction. Knowing another circle's row ID must not grant access.
 - [ ] Unauthenticated access to any `(app)` route redirects to `/login`; unauthenticated Server Action invocation returns an auth error (tested).
 - [ ] Phone-OTP mock login is removed entirely (no SMS in v2, §2 non-goals).
 - [ ] Sign-out works; sessions survive browser restarts (30-day session).
@@ -475,6 +482,7 @@ Research surfaced a material 2025 event: **Auth.js/NextAuth is now in maintenanc
 
 - **Do:** replace `next-auth` with `better-auth` (Prisma adapter, DB sessions, Google provider + One Tap plugin). Regenerate the auth tables via its schema generator (shape is near-identical to the current NextAuth models; no production users exist, so this is a clean swap). New `src/lib/auth.ts` remains the single auth module (`CLAUDE.md` rule); session checks in every action per §6.1.
 - **Timebox:** 1 day. If integration fights back, **fallback** is the already-wired Auth.js v5 Google provider (it still receives security patches) — the feature spec (§6.1) is identical either way.
+- **Schema rule:** Better Auth's current CLI-generated Prisma schema is the source for auth fields and relations. Do not hand-copy an old auth schema from this document; run `npx auth@latest generate`, review the diff, then apply it through the repository's Prisma migration flow.
 - Google Cloud console: OAuth consent screen in *testing* mode with both brothers as test users — no app verification needed at this scale.
 - Update the `CLAUDE.md` stack line and auth section when landed.
 
@@ -547,6 +555,7 @@ model Invite {
   acceptedAt  DateTime?
   revokedAt   DateTime?
   circle      CareCircle @relation(fields: [circleId], references: [id], onDelete: Cascade)
+  invitedBy   User       @relation(fields: [invitedById], references: [id], onDelete: Cascade)
 }
 
 // ── Care recipients & profile ──
@@ -628,6 +637,7 @@ model Medication {
   notes              String?
   recipient          CareRecipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
   prescriber         Provider?     @relation(fields: [prescriberId], references: [id], onDelete: SetNull)
+  defaultAssignee    User?         @relation(fields: [defaultAssigneeId], references: [id], onDelete: SetNull)
   refillTasks        Task[]
 }
 
@@ -646,6 +656,7 @@ model Appointment {
   status      ApptStatus    @default(SCHEDULED)
   recipient   CareRecipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
   provider    Provider?     @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  attendee    User?         @relation(fields: [attendeeId], references: [id], onDelete: SetNull)
   @@index([recipientId, startsAt])
 }
 
@@ -689,6 +700,7 @@ model Task {
   creatorId    String?
   circle       CareCircle    @relation(fields: [circleId], references: [id], onDelete: Cascade)
   recipient    CareRecipient? @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  suggestion   Suggestion?    @relation(fields: [suggestionId], references: [id], onDelete: SetNull)
   medication   Medication?   @relation(fields: [medicationId], references: [id], onDelete: SetNull)
   assignee     User?         @relation("Assignee", fields: [assigneeId], references: [id])
   creator      User?         @relation("Creator",  fields: [creatorId],  references: [id])
@@ -743,11 +755,11 @@ model Suggestion {
   status       SuggestionStatus  @default(PENDING)
   snoozedUntil DateTime?
   dismissReason DismissReason?
-  taskId       String?
   createdAt    DateTime          @default(now())
   circle       CareCircle         @relation(fields: [circleId], references: [id], onDelete: Cascade)
   recipient    CareRecipient?     @relation(fields: [recipientId], references: [id], onDelete: Cascade)
   template     SuggestionTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  acceptedTask Task?
   // cycleKey embeds its scope ("recip_abc:2026-fall" / "circle:2026-tax-filing"):
   // a composite unique over nullable recipientId would NOT dedupe circle-level rows,
   // because Postgres treats NULLs as distinct in unique constraints
@@ -775,6 +787,7 @@ model ActivityEvent {
   meta      Json?
   createdAt DateTime   @default(now())
   circle    CareCircle @relation(fields: [circleId], references: [id], onDelete: Cascade)
+  actor     User?      @relation(fields: [actorId], references: [id], onDelete: SetNull)
   @@index([circleId, createdAt])
 }
 
@@ -786,6 +799,7 @@ model NotificationLog {
   status    String                     // sent, skipped_empty, failed
   error     String?
   createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model JobRun {
@@ -826,14 +840,16 @@ erDiagram
 
 ### 10.2 Migration from v1 (data exists in prod)
 
-Order matters; run as a script (`prisma/migrations` or a one-off `tsx` script) against `DIRECT_URL`:
+Order matters. This is an **expand → backfill → verify → contract** migration; `prisma db push` must not be used against production for the required-column transition:
 
-1. Create new tables (`db push`).
-2. Create one `CareCircle` ("Family"); create `Membership(OWNER)` for the existing real user; memberships for seeded siblings.
-3. Create one `CareRecipient` (name from Pranava at first login — placeholder "Parent" until onboarding completes) and attach all existing `VitalInfo` rows to it.
-4. Backfill `Task.circleId` = the circle for all rows.
-5. Swap auth tables per §9.3 (no real sessions exist to preserve).
-6. Seed the template catalog (idempotent `upsert` by `slug`, per `CLAUDE.md` seeding rule) — catalog seeding moves out of the runtime seed for demo data and into `prisma/seed-catalog.ts`, safe to run on every deploy.
+1. Take and restore-test a production backup. Record row counts for users, tasks, and vital info.
+2. **Expand:** create new tables and add `Task.circleId` / `VitalInfo.recipientId` as nullable columns using a reviewed Prisma migration.
+3. Create one `CareCircle` ("Family"); create `Membership(OWNER)` for the existing real user; memberships for seeded siblings.
+4. Create one `CareRecipient` (placeholder "Parent" until onboarding completes), then backfill every existing task and vital-info row.
+5. **Verify:** abort unless null counts are zero, row counts match the preflight snapshot, and the legacy user's circle can read every migrated row.
+6. **Contract:** make the new foreign keys required and add indexes/constraints in a second reviewed Prisma migration. Keep the legacy auth tables until Better Auth sign-in succeeds in production; remove them only in a later cleanup migration.
+7. Seed the template catalog (idempotent `upsert` by `slug`, per `CLAUDE.md` seeding rule) — catalog seeding moves out of the runtime seed for demo data and into `prisma/seed-catalog.ts`, safe to run explicitly during release, never during application build.
+8. Rollback is restore-from-backup plus traffic switchback to Railway; do not attempt a reverse data migration after new writes begin.
 
 ---
 

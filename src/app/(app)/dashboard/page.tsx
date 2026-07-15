@@ -1,21 +1,20 @@
 import { prisma } from "@/lib/db";
-import { DEV_USER, getDevUserId } from "@/lib/dev-user";
+import { requireCircleContext } from "@/lib/access";
 import { DashboardClient } from "./dashboard-client";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  // TODO: Get userId from auth session
-  const userId = await getDevUserId();
+  const { user, circleId } = await requireCircleContext();
 
   const [activeTasks, resolvedTasks] = await Promise.all([
     prisma.task.findMany({
-      where: { status: { not: "Resolved" } },
+      where: { circleId, status: { not: "Resolved" } },
       include: { assignee: true, creator: true },
       orderBy: { createdAt: "desc" },
     }),
     prisma.task.findMany({
-      where: { status: "Resolved" },
+      where: { circleId, status: "Resolved" },
       include: { assignee: true, creator: true },
       orderBy: { updatedAt: "desc" },
       take: 20,
@@ -23,14 +22,14 @@ export default async function DashboardPage() {
   ]);
 
   const unassigned = activeTasks.filter((t) => !t.assigneeId);
-  const myTasks = activeTasks.filter((t) => t.assigneeId === userId);
+  const myTasks = activeTasks.filter((task) => task.assigneeId === user.id);
 
   return (
     <DashboardClient
       unassigned={unassigned}
       myTasks={myTasks}
       resolved={resolvedTasks}
-      userName={DEV_USER.name}
+      userName={user.name}
     />
   );
 }

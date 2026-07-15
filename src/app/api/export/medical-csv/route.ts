@@ -1,28 +1,32 @@
 import { prisma } from "@/lib/db";
+import { getMembership, getRequestSession } from "@/lib/access";
 import { stringify } from "csv-stringify/sync";
 import { NextResponse } from "next/server";
 
-// TODO: Re-add auth check when auth is configured
 export async function GET() {
+  const session = await getRequestSession();
+  if (!session?.user?.id) return new NextResponse("Unauthorized", { status: 401 });
+  const membership = await getMembership(session.user.id);
+  if (!membership) return new NextResponse("Forbidden", { status: 403 });
+
   const medicalTasks = await prisma.task.findMany({
-    where: { type: "Medical" },
+    where: { circleId: membership.circleId, type: "Medical" },
     include: { assignee: true, creator: true },
     orderBy: { createdAt: "desc" },
   });
 
-  const csvData = medicalTasks.map((task) => ({
-    Title: task.title,
-    Description: task.description ?? "N/A",
-    Status: task.status,
-    "Due Date": task.dueDate
-      ? task.dueDate.toISOString().split("T")[0]
-      : "N/A",
-    "Assigned To": task.assignee?.name ?? "Unassigned",
-    "Created By": task.creator?.name ?? "N/A",
-    "Created At": task.createdAt.toISOString().split("T")[0],
-  }));
-
-  const csv = stringify(csvData, { header: true });
+  const csv = stringify(
+    medicalTasks.map((task) => ({
+      Title: task.title,
+      Description: task.description ?? "N/A",
+      Status: task.status,
+      "Due Date": task.dueDate?.toISOString().split("T")[0] ?? "N/A",
+      "Assigned To": task.assignee?.name ?? "Unassigned",
+      "Created By": task.creator?.name ?? "N/A",
+      "Created At": task.createdAt.toISOString().split("T")[0],
+    })),
+    { header: true },
+  );
 
   return new NextResponse(csv, {
     headers: {

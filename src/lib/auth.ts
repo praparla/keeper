@@ -1,70 +1,28 @@
-import NextAuth from "next-auth";
-import Google from "next-auth/providers/google";
-import Credentials from "next-auth/providers/credentials";
-import { PrismaAdapter } from "@auth/prisma-adapter";
+import { betterAuth } from "better-auth";
+import { prismaAdapter } from "better-auth/adapters/prisma";
+import { oneTap } from "better-auth/plugins";
 import { prisma } from "@/lib/db";
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
-  adapter: PrismaAdapter(prisma),
-  session: { strategy: "jwt" },
-  pages: {
-    signIn: "/login",
+export const auth = betterAuth({
+  database: prismaAdapter(prisma, { provider: "postgresql" }),
+  secret: process.env.BETTER_AUTH_SECRET ?? process.env.AUTH_SECRET,
+  baseURL: process.env.BETTER_AUTH_URL,
+  user: {
+    modelName: "User",
+    fields: { emailVerified: "authEmailVerified" },
   },
-  providers: [
-    Google({
-      clientId: process.env.AUTH_GOOGLE_ID,
-      clientSecret: process.env.AUTH_GOOGLE_SECRET,
-    }),
-    Credentials({
-      name: "Phone OTP",
-      credentials: {
-        phone: { label: "Phone Number", type: "tel" },
-        code: { label: "Verification Code", type: "text" },
-      },
-      async authorize(credentials) {
-        const phone = credentials?.phone as string;
-        const code = credentials?.code as string;
-
-        // MVP: hardcoded OTP for local testing
-        if (!phone || code !== "123456") {
-          return null;
-        }
-
-        // Find or create user by phone number
-        let user = await prisma.user.findFirst({
-          where: { phoneNumber: phone },
-        });
-
-        if (!user) {
-          user = await prisma.user.create({
-            data: {
-              phoneNumber: phone,
-              name: phone,
-            },
-          });
-        }
-
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image,
-        };
-      },
-    }),
-  ],
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (session.user && token.id) {
-        session.user.id = token.id as string;
-      }
-      return session;
+  session: {
+    modelName: "AuthSession",
+    expiresIn: 60 * 60 * 24 * 30,
+    updateAge: 60 * 60 * 24,
+  },
+  account: { modelName: "AuthAccount" },
+  verification: { modelName: "AuthVerification" },
+  socialProviders: {
+    google: {
+      clientId: process.env.AUTH_GOOGLE_ID ?? "",
+      clientSecret: process.env.AUTH_GOOGLE_SECRET ?? "",
     },
   },
+  plugins: [oneTap()],
 });

@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:run
+      - run: npm run build
+        env:
+          DATABASE_URL: postgresql://keeper:keeper@localhost:5432/keeper
+          DIRECT_URL: postgresql://keeper:keeper@localhost:5432/keeper
+          AUTH_SECRET: ci-only-secret-ci-only-secret-ci-only
+          AUTH_GOOGLE_ID: ci-google-client-id
+          AUTH_GOOGLE_SECRET: ci-google-client-secret
+          NEXT_PUBLIC_GOOGLE_CLIENT_ID: ci-google-client-id

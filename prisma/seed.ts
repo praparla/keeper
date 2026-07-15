@@ -3,123 +3,70 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 async function main() {
-  // Seed users (family members)
-  const pranava = await prisma.user.upsert({
-    where: { email: "pranava@family.dev" },
-    update: {},
-    create: {
-      name: "Pranava",
-      email: "pranava@family.dev",
-      phoneNumber: "+15550001",
-    },
+  const users = await Promise.all(
+    [
+      ["seed-pranava", "Pranava", "pranava@family.dev", "teal"],
+      ["seed-sibling-1", "Sibling 1", "sibling1@family.dev", "blue"],
+      ["seed-sibling-2", "Sibling 2", "sibling2@family.dev", "orange"],
+    ].map(([id, name, email, color]) =>
+      prisma.user.upsert({
+        where: { email },
+        update: { name, color },
+        create: { id, name, email, color },
+      }),
+    ),
+  );
+  const [pranava, sibling1, sibling2] = users;
+
+  const circle = await prisma.careCircle.upsert({
+    where: { id: "seed-family-circle" },
+    update: { name: "Family" },
+    create: { id: "seed-family-circle", name: "Family" },
   });
 
-  const sibling1 = await prisma.user.upsert({
-    where: { email: "sibling1@family.dev" },
-    update: {},
-    create: {
-      name: "Sibling 1",
-      email: "sibling1@family.dev",
-      phoneNumber: "+15550002",
-    },
-  });
+  await Promise.all(
+    users.map((user, index) =>
+      prisma.membership.upsert({
+        where: { userId_circleId: { userId: user.id, circleId: circle.id } },
+        update: { role: index === 0 ? "OWNER" : "MEMBER" },
+        create: { userId: user.id, circleId: circle.id, role: index === 0 ? "OWNER" : "MEMBER" },
+      }),
+    ),
+  );
 
-  const sibling2 = await prisma.user.upsert({
-    where: { email: "sibling2@family.dev" },
-    update: {},
-    create: {
-      name: "Sibling 2",
-      email: "sibling2@family.dev",
-      phoneNumber: "+15550003",
-    },
-  });
-
-  console.log("Seeded users:", pranava.name, sibling1.name, sibling2.name);
-
-  // Seed Vital Info
-  const vitalInfoData = [
-    {
-      category: "Medications",
-      content:
-        "Lisinopril 10mg (daily, morning)\nMetformin 500mg (twice daily with meals)\nAspirin 81mg (daily)",
-    },
-    {
-      category: "Allergies",
-      content: "Penicillin — causes rash\nSulfa drugs — causes nausea",
-    },
-    {
-      category: "Doctors",
-      content:
-        "Dr. Smith (Primary Care) — (555) 100-2000\nDr. Patel (Cardiologist) — (555) 100-3000\nDr. Lee (Endocrinologist) — (555) 100-4000",
-    },
-    {
-      category: "Insurance",
-      content:
-        "Medicare Part A & B\nSupplemental: Blue Cross Plan F\nMember ID: ABC123456789",
-    },
-    {
-      category: "Emergency Contacts",
-      content:
-        "Pranava — (555) 000-1111\nSibling 1 — (555) 000-2222\nSibling 2 — (555) 000-3333",
-    },
+  const vitalInfo = [
+    ["Medications", "Lisinopril 10mg (daily, morning)\nMetformin 500mg (twice daily with meals)\nAspirin 81mg (daily)"],
+    ["Allergies", "Penicillin — causes rash\nSulfa drugs — causes nausea"],
+    ["Doctors", "Dr. Smith (Primary Care) — (555) 100-2000\nDr. Patel (Cardiologist) — (555) 100-3000"],
+    ["Insurance", "Medicare Part A & B\nSupplemental: Blue Cross Plan F\nMember ID: ABC123456789"],
+    ["Emergency Contacts", "Pranava — (555) 000-1111\nSibling 1 — (555) 000-2222"],
   ];
-
-  for (const info of vitalInfoData) {
-    // Delete existing then create fresh (idempotent seed)
-    await prisma.vitalInfo.deleteMany({ where: { category: info.category } });
-    await prisma.vitalInfo.create({ data: info });
+  for (const [category, content] of vitalInfo) {
+    await prisma.vitalInfo.upsert({
+      where: { circleId_category: { circleId: circle.id, category } },
+      update: { content },
+      create: { circleId: circle.id, category, content },
+    });
   }
 
-  console.log("Seeded vital info");
+  await prisma.task.deleteMany({ where: { circleId: circle.id } });
+  await prisma.task.createMany({
+    data: [
+      { circleId: circle.id, title: "Schedule annual physical", type: "Medical", creatorId: pranava.id },
+      { circleId: circle.id, title: "Pick up prescription from CVS", type: "Errand", creatorId: sibling1.id },
+      { circleId: circle.id, title: "Fix leaky kitchen faucet", type: "Household", status: "InProgress", assigneeId: sibling2.id, creatorId: pranava.id },
+      { circleId: circle.id, title: "Mom prefers morning appointments", type: "Note", creatorId: pranava.id },
+      { circleId: circle.id, title: "Cardiology follow-up completed", description: "Dr. Patel says everything looks good. Next visit in 6 months.", type: "Medical", status: "Resolved", assigneeId: pranava.id, creatorId: pranava.id },
+    ],
+  });
 
-  // Seed some example tasks
-  const tasks = [
-    {
-      title: "Schedule annual physical",
-      type: "Medical" as const,
-      status: "Open" as const,
-      creatorId: pranava.id,
-    },
-    {
-      title: "Pick up prescription from CVS",
-      type: "Errand" as const,
-      status: "Open" as const,
-      creatorId: sibling1.id,
-    },
-    {
-      title: "Fix leaky kitchen faucet",
-      type: "Household" as const,
-      status: "InProgress" as const,
-      assigneeId: sibling2.id,
-      creatorId: pranava.id,
-    },
-    {
-      title: "Mom prefers morning appointments",
-      type: "Note" as const,
-      status: "Open" as const,
-      creatorId: pranava.id,
-    },
-    {
-      title: "Cardiology follow-up completed",
-      description: "Dr. Patel says everything looks good. Next visit in 6 months.",
-      type: "Medical" as const,
-      status: "Resolved" as const,
-      assigneeId: pranava.id,
-      creatorId: pranava.id,
-    },
-  ];
-
-  for (const task of tasks) {
-    await prisma.task.create({ data: task });
-  }
-
-  console.log("Seeded tasks");
+  console.log(`Seeded ${users.length} users in ${circle.name}`);
 }
 
 main()
   .then(() => prisma.$disconnect())
-  .catch((e) => {
-    console.error(e);
-    prisma.$disconnect();
+  .catch(async (error) => {
+    console.error(error);
+    await prisma.$disconnect();
     process.exit(1);
   });

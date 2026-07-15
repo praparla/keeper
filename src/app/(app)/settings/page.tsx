@@ -1,25 +1,23 @@
 import { prisma } from "@/lib/db";
-import { DEV_USER, getDevUserId } from "@/lib/dev-user";
+import { requireCircleContext } from "@/lib/access";
 import { SettingsClient } from "./settings-client";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  // TODO: Get user from auth session
-  const userId = await getDevUserId();
-  const user = await prisma.user.findFirst({
-    where: { email: DEV_USER.email },
-  });
+  const { user, membership } = await requireCircleContext();
+  const settings = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
 
   return (
     <SettingsClient
+      circleName={membership.circle.name}
       user={{
-        id: user?.id ?? userId,
-        name: user?.name ?? DEV_USER.name,
-        email: user?.email ?? DEV_USER.email,
-        phoneNumber: user?.phoneNumber ?? "",
-        emailReminders: user?.emailReminders ?? true,
-        smsReminders: user?.smsReminders ?? true,
+        name: settings.name ?? "Family member",
+        email: settings.email ?? "",
+        timezone: settings.timezone,
+        digestEmail: settings.digestEmail,
+        immediateEmail: settings.immediateEmail,
+        weeklyEmail: settings.weeklyEmail,
       }}
     />
   );

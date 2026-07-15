@@ -1,6 +1,6 @@
 # CLAUDE.md — Keeper Project Development Principles
 
-> Next.js 16 (App Router) · Prisma · NextAuth v5 · React 19 · Tailwind CSS · TypeScript
+> Next.js 16 (App Router) · Prisma · Better Auth · React 19 · Tailwind CSS · TypeScript
 
 ---
 
@@ -63,11 +63,12 @@ Never blindly write code. Always follow this loop:
 
 ---
 
-## Authentication & Authorization (NextAuth v5)
+## Authentication & Authorization (Better Auth)
 
-- **Session check in every protected Server Action.** Call `auth()` at the top of every action that reads or writes user data. Throw or return an error if no session exists.
+- **Session check in every protected Server Action.** Use `requireUser()` or `requireCircleContext()` from `src/lib/access.ts`. Throw if no session or membership exists.
 - **Never trust client-supplied user IDs.** Always derive the acting user from `session.user.id`, not from request body or URL params.
 - **Auth config lives in `src/lib/auth.ts`.** Do not duplicate auth logic elsewhere.
+- **Preserve legacy auth tables during cutover.** Better Auth uses `AuthSession`, `AuthAccount`, and `AuthVerification`; remove old NextAuth tables only after production sign-in succeeds.
 - **Environment variables for secrets.** `AUTH_SECRET`, `DATABASE_URL`, and any OAuth credentials must be in `.env.local` only, never committed.
 
 ---
@@ -76,18 +77,8 @@ Never blindly write code. Always follow this loop:
 
 **Tests are mandatory with every code change.** Bug fix → regression test. New feature → feature tests. Refactor → confirm existing tests still pass.
 
-### Setup (not yet installed — add when writing first tests)
-Recommended stack: **Vitest** + **@testing-library/react** + **@testing-library/user-event**
-
-```bash
-npm install -D vitest @vitejs/plugin-react @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom
-```
-
-Add to `package.json` scripts:
-```json
-"test": "vitest",
-"test:run": "vitest run"
-```
+### Setup
+Vitest, Testing Library, jsdom, and CI are installed. Tests live beside sources as `*.test.ts(x)`.
 
 ### What to test
 - **Server Actions** — unit test business logic and DB interactions (mock Prisma with `vitest.mock`)
@@ -191,15 +182,15 @@ Maintain a `backlog.md` for ideas, features, and enhancements.
 
 ---
 
-## Railway Deployment
+## Deployment transition
 
-**Hosted at:** `keeper-production-a8ea.up.railway.app`
+**Current production:** `keeper-production-a8ea.up.railway.app` on Railway. **Target:** Vercel + Supabase after the M0 runbook is completed and verified.
 **Railway project:** `modest-warmth` · GitHub auto-deploy from `pranava0x0/keeper` (main branch; repo was `praparla/keeper` — renamed, old URL redirects for git but confuses `gh`, so keep remotes pointed at the new name)
 **Region:** europe-west4-drams3a
 
 ### How deploys work
 - Every `git push origin main` triggers an auto-deploy on Railway.
-- Build pipeline: `prisma db push` → `tsx prisma/seed.ts` → `next build` (see `package.json` "build" script).
+- Build pipeline is now `prisma generate` → `next build`. Schema migrations and seed runs are explicit release steps; preview builds never mutate production.
 - The seed is idempotent (uses `upsert` for users, `deleteMany` + `create` for vital info).
 
 ### Environment variables (set on Railway, not in code)
@@ -220,5 +211,5 @@ When migrating the Prisma datasource:
 2. No schema changes needed — Prisma's SQLite and PostgreSQL schemas are compatible for this project's types.
 3. The `prisma db push` in the build script creates all tables on first deploy.
 
-### Current auth state (as of 2026-03-18)
-Auth is **bypassed** via `src/lib/dev-user.ts` which hardcodes `pranava@family.dev`. The production DB must have this user seeded or the dashboard will crash. Real auth (Google OAuth + SMS OTP) is a backlog item.
+### Current auth state (as of 2026-07-15)
+Better Auth Google sign-in, circle tenancy, onboarding, and single-use invite links are implemented. Production still needs OAuth credentials, migrations, and the two-user acceptance test in `docs/m0-runbook.md` before the bypass removal is operationally complete.
