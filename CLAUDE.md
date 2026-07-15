@@ -194,7 +194,7 @@ Maintain a `backlog.md` for ideas, features, and enhancements.
 ## Railway Deployment
 
 **Hosted at:** `keeper-production-a8ea.up.railway.app`
-**Railway project:** `modest-warmth` · GitHub auto-deploy from `praparla/keeper` (main branch)
+**Railway project:** `modest-warmth` · GitHub auto-deploy from `pranava0x0/keeper` (main branch; repo was `praparla/keeper` — renamed, old URL redirects for git but confuses `gh`, so keep remotes pointed at the new name)
 **Region:** europe-west4-drams3a
 
 ### How deploys work
