@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { TaskCard } from "@/components/task-card";
 import { QuickAddFab, type RecipientChip } from "@/components/quick-add-fab";
+import { SuggestionInbox, type SuggestionDTO, type MemberOption } from "@/components/suggestion-inbox";
 import { EmptyState } from "@/components/empty-state";
 import { Download, Inbox, ClipboardList, CheckCircle2 } from "lucide-react";
 
@@ -20,12 +21,16 @@ export function DashboardClient({
   resolved,
   userName,
   recipients = [],
+  suggestions = [],
+  members = [],
 }: {
   unassigned: TaskWithRelations[];
   myTasks: TaskWithRelations[];
   resolved: TaskWithRelations[];
   userName: string;
   recipients?: RecipientChip[];
+  suggestions?: SuggestionDTO[];
+  members?: MemberOption[];
 }) {
   const [fabOpen, setFabOpen] = useState(false);
 
@@ -55,6 +60,8 @@ export function DashboardClient({
         </TabsList>
 
         <TabsContent value="active">
+          <SuggestionInbox suggestions={suggestions} members={members} />
+
           <section className="mb-6">
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
               Unassigned Needs

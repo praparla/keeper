@@ -18,6 +18,14 @@ export function isFactValue(value: string): value is FactValue {
 
 export type FactCategory = "home" | "health";
 
+/**
+ * How the engine treats an `unknown` value when this fact gates a template (§11.2):
+ * - "skip"  — never guess about their house/life; the gated template does not fire.
+ * - "false" — a diagnosis is absent until stated; the safe default (so the general
+ *   eye-exam fires until hasDiabetes flips to true and the diabetic one takes over).
+ */
+export type UnknownGate = "skip" | "false";
+
 export interface FactDefinition {
   key: string;
   /** Short label for the "What Keeper knows" list. */
@@ -25,29 +33,34 @@ export interface FactDefinition {
   /** Interview prompt shown on the onboarding chip. */
   question: string;
   category: FactCategory;
+  unknownGate: UnknownGate;
 }
 
-/** Home-facts interview (~10 chips, §6.2 / §7.3 step 3). */
+/** Home-facts interview (~10 chips, §6.2 / §7.3 step 3). Unknown ⇒ skip (never guess). */
 export const HOME_FACTS: FactDefinition[] = [
-  { key: "hasLawn", label: "Lawn", question: "Has a lawn to mow?", category: "home" },
-  { key: "hasDriveway", label: "Driveway", question: "Has a driveway (to shovel/seal)?", category: "home" },
-  { key: "hasGutters", label: "Gutters", question: "Has gutters to clean?", category: "home" },
-  { key: "hasFireplace", label: "Fireplace", question: "Has a fireplace or chimney?", category: "home" },
-  { key: "hasCar", label: "Car", question: "Owns a car?", category: "home" },
-  { key: "hasStairs", label: "Stairs", question: "Has stairs in the home?", category: "home" },
-  { key: "livesAlone", label: "Lives alone", question: "Lives alone?", category: "home" },
-  { key: "hasBasement", label: "Basement", question: "Has a basement?", category: "home" },
-  { key: "hasWindowAC", label: "Window AC", question: "Uses window AC units?", category: "home" },
-  { key: "hasPets", label: "Pets", question: "Has pets?", category: "home" },
+  { key: "hasLawn", label: "Lawn", question: "Has a lawn to mow?", category: "home", unknownGate: "skip" },
+  { key: "hasDriveway", label: "Driveway", question: "Has a driveway (to shovel/seal)?", category: "home", unknownGate: "skip" },
+  { key: "hasGutters", label: "Gutters", question: "Has gutters to clean?", category: "home", unknownGate: "skip" },
+  { key: "hasFireplace", label: "Fireplace", question: "Has a fireplace or chimney?", category: "home", unknownGate: "skip" },
+  { key: "hasCar", label: "Car", question: "Owns a car?", category: "home", unknownGate: "skip" },
+  { key: "hasStairs", label: "Stairs", question: "Has stairs in the home?", category: "home", unknownGate: "skip" },
+  { key: "livesAlone", label: "Lives alone", question: "Lives alone?", category: "home", unknownGate: "skip" },
+  { key: "hasBasement", label: "Basement", question: "Has a basement?", category: "home", unknownGate: "skip" },
+  { key: "hasWindowAC", label: "Window AC", question: "Uses window AC units?", category: "home", unknownGate: "skip" },
+  { key: "hasPets", label: "Pets", question: "Has pets?", category: "home", unknownGate: "skip" },
 ];
 
-/** Health flags relevant to cadence rules (§6.2 / §7.3 step 4 / §11.3). */
+/**
+ * Health flags relevant to cadence rules (§6.2 / §7.3 step 4 / §11.3).
+ * Diagnoses default to false when unknown (absence of a diagnosis is the safe default);
+ * everything else is unknown ⇒ skip (don't assume they drive / have accounts).
+ */
 export const HEALTH_FACTS: FactDefinition[] = [
-  { key: "drives", label: "Drives", question: "Still driving?", category: "health" },
-  { key: "hasDiabetes", label: "Diabetes", question: "Has diabetes?", category: "health" },
-  { key: "hasHeartCondition", label: "Heart condition", question: "Has a heart condition?", category: "health" },
-  { key: "enrolledMedicareAdvantage", label: "Medicare Advantage", question: "Enrolled in Medicare Advantage?", category: "health" },
-  { key: "hasRetirementAccounts", label: "IRA / 401(k)", question: "Has an IRA or 401(k)?", category: "health" },
+  { key: "drives", label: "Drives", question: "Still driving?", category: "health", unknownGate: "skip" },
+  { key: "hasDiabetes", label: "Diabetes", question: "Has diabetes?", category: "health", unknownGate: "false" },
+  { key: "hasHeartCondition", label: "Heart condition", question: "Has a heart condition?", category: "health", unknownGate: "false" },
+  { key: "enrolledMedicareAdvantage", label: "Medicare Advantage", question: "Enrolled in Medicare Advantage?", category: "health", unknownGate: "skip" },
+  { key: "hasRetirementAccounts", label: "IRA / 401(k)", question: "Has an IRA or 401(k)?", category: "health", unknownGate: "skip" },
 ];
 
 export const ALL_FACTS: FactDefinition[] = [...HOME_FACTS, ...HEALTH_FACTS];

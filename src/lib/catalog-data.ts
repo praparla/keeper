@@ -1,0 +1,285 @@
+/**
+ * Suggestion template catalog (Appendix A). Pure data — the single source of truth for
+ * both `prisma/seed-catalog.ts` (which upserts these into SuggestionTemplate by slug) and
+ * the catalog-validation test. Editing a template is a PR with a source URL, not a DB poke
+ * (§11.6). The gates object is stored verbatim in SuggestionTemplate.requiresFacts (JSON);
+ * `circleLevel: true` marks recipient-agnostic templates (evaluated once per circle).
+ */
+import type {
+  TemplateCategory, TriggerType, IntervalAnchor, TaskType, Recurrence, ResidenceType,
+} from "@prisma/client";
+import type { ClimateRegion } from "./climate";
+
+export interface CatalogGates {
+  facts?: Record<string, boolean>;
+  residence?: ResidenceType[];
+  regions?: ClimateRegion[];
+  minActiveMeds?: number;
+  circleLevel?: boolean;
+}
+
+export interface CatalogEntry {
+  slug: string;
+  title: string;
+  reasonTemplate: string;
+  category: TemplateCategory;
+  triggerType: TriggerType;
+  windowStartMonth?: number;
+  windowStartDay?: number;
+  windowEndMonth?: number;
+  windowEndDay?: number;
+  intervalDays?: number;
+  intervalAnchor?: IntervalAnchor;
+  leadDays?: number;
+  minAge?: number;
+  gates?: CatalogGates;
+  climateSensitive?: boolean;
+  defaultTaskType?: TaskType;
+  defaultRecurrence?: Recurrence;
+  sourceUrl: string;
+  active?: boolean; // default true
+}
+
+const HOUSE_CONDO: ResidenceType[] = ["HOUSE", "CONDO"];
+const HOUSE: ResidenceType[] = ["HOUSE"];
+const SNOW: ClimateRegion[] = ["SNOW_COLD"];
+
+export const CATALOG: CatalogEntry[] = [
+  // ── A.1 HOME_SEASONAL ──
+  { slug: "ac-tuneup-spring", title: "AC tune-up", category: "HOME_SEASONAL", triggerType: "SEASONAL_WINDOW",
+    windowStartMonth: 3, windowStartDay: 1, windowEndMonth: 5, windowEndDay: 31, gates: { residence: HOUSE_CONDO },
+    defaultRecurrence: "YEARLY", reasonTemplate: "Get {name}'s cooling system a professional tune-up before summer — {window}.",
+    sourceUrl: "https://www.energystar.gov/products/heating_cooling/maintenance" },
+  { slug: "furnace-tuneup-fall", title: "Furnace tune-up", category: "HOME_SEASONAL", triggerType: "SEASONAL_WINDOW",
+    windowStartMonth: 9, windowStartDay: 1, windowEndMonth: 10, windowEndDay: 31, gates: { residence: HOUSE_CONDO },
+    defaultRecurrence: "YEARLY", reasonTemplate: "{name}'s furnace is due for its annual service before heating season — {window} is the window.",
+    sourceUrl: "https://www.energystar.gov/products/heating_cooling/maintenance" },
+  { slug: "hvac-filter", title: "Replace HVAC filter", category: "HOME_SEASONAL", triggerType: "INTERVAL",
+    intervalDays: 90, intervalAnchor: "ASSUME_DUE", gates: { residence: HOUSE_CONDO }, defaultRecurrence: "DAYS",
+    reasonTemplate: "Swap {name}'s HVAC filter — roughly every 90 days keeps the system efficient.",
+    sourceUrl: "https://www.energystar.gov/products/heating_cooling/maintenance" },
+  { slug: "gutter-clean-spring", title: "Clean gutters", category: "HOME_SEASONAL", triggerType: "SEASONAL_WINDOW",
+    windowStartMonth: 4, windowStartDay: 1, windowEndMonth: 5, windowEndDay: 31, gates: { facts: { hasGutters: true } },
+    climateSensitive: true, reasonTemplate: "Clear {name}'s gutters after the spring pollen and seed drop — {window}.",
+    sourceUrl: "https://www.nfpa.org/education-and-research" },
+  { slug: "gutter-clean-fall", title: "Clean gutters (after leaf drop)", category: "HOME_SEASONAL", triggerType: "SEASONAL_WINDOW",
+    windowStartMonth: 10, windowStartDay: 15, windowEndMonth: 11, windowEndDay: 30, gates: { facts: { hasGutters: true } },
+    climateSensitive: true, reasonTemplate: "Clean {name}'s gutters after the leaves finish dropping — {window} — to prevent ice dams.",
+    sourceUrl: "https://www.travelers.com/resources/home/maintenance/gutter-cleaning" },
+  { slug: "roof-inspect-fall", title: "Roof inspection", category: "HOME_SEASONAL", triggerType: "SEASONAL_WINDOW",
+    windowStartMonth: 9, windowStartDay: 1, windowEndMonth: 11, windowEndDay: 15, gates: { residence: HOUSE },
+    defaultRecurrence: "YEARLY", reasonTemplate: "Have {name}'s roof looked over before winter loads it — {window}.",
+    sourceUrl: "https://www.nrca.net/homeowner" },
+  { slug: "lawn-service-spring", title: "Line up lawn mowing", category: "HOME_SEASONAL", triggerType: "SEASONAL_WINDOW",
+    windowStartMonth: 3, windowStartDay: 15, windowEndMonth: 4, windowEndDay: 30, gates: { facts: { hasLawn: true } },
+    climateSensitive: true, reasonTemplate: "Arrange {name}'s mowing for the season before it gets away from you — {window}.",
+    sourceUrl: "https://extension.umn.edu/lawn-care" },
+  { slug: "lawn-fertilize-fall", title: "Fall lawn fertilizer", category: "HOME_SEASONAL", triggerType: "SEASONAL_WINDOW",
+    windowStartMonth: 8, windowStartDay: 25, windowEndMonth: 9, windowEndDay: 30, gates: { facts: { hasLawn: true } },
+    climateSensitive: true, reasonTemplate: "The main fall feeding for {name}'s lawn — {window} is the window.",
+    sourceUrl: "https://extension.umn.edu/lawn-care/fall-lawn-care" },
+  { slug: "lawn-aerate-overseed", title: "Aerate & overseed", category: "HOME_SEASONAL", triggerType: "SEASONAL_WINDOW",
+    windowStartMonth: 8, windowStartDay: 20, windowEndMonth: 9, windowEndDay: 30, gates: { facts: { hasLawn: true } },
+    climateSensitive: true, active: false, reasonTemplate: "Aerate and overseed {name}'s lawn while soil is warm — {window}.",
+    sourceUrl: "https://extension.umn.edu/lawn-care" },
+  { slug: "leaf-clear-walkways", title: "Keep walkways clear of leaves", category: "HOME_SEASONAL", triggerType: "SEASONAL_WINDOW",
+    windowStartMonth: 10, windowStartDay: 15, windowEndMonth: 11, windowEndDay: 30, gates: { facts: { hasLawn: true } },
+    climateSensitive: true, defaultRecurrence: "WEEKLY", reasonTemplate: "Wet leaves on {name}'s walks and drive are a slip hazard — keep them cleared through {window}.",
+    sourceUrl: "https://www.cdc.gov/falls/index.html" },
+  { slug: "hose-bib-winterize", title: "Winterize outdoor faucets", category: "HOME_SEASONAL", triggerType: "SEASONAL_WINDOW",
+    windowStartMonth: 10, windowStartDay: 1, windowEndMonth: 10, windowEndDay: 31, gates: { residence: HOUSE },
+    climateSensitive: true, reasonTemplate: "First frost near {name} lands around {frostDate}; disconnect hoses and drain outdoor faucets before then.",
+    sourceUrl: "https://www.redcross.org/get-help/how-to-prepare-for-emergencies/types-of-emergencies/winter-storm.html" },
+  { slug: "hose-reconnect-spring", title: "Reopen outdoor faucets", category: "HOME_SEASONAL", triggerType: "SEASONAL_WINDOW",
+    windowStartMonth: 4, windowStartDay: 1, windowEndMonth: 4, windowEndDay: 30, gates: { residence: HOUSE },
+    climateSensitive: true, reasonTemplate: "Reopen {name}'s outdoor faucets once the last freeze has passed — {window}.",
+    sourceUrl: "https://www.redcross.org/get-help/how-to-prepare-for-emergencies/types-of-emergencies/winter-storm.html" },
+  { slug: "window-ac-install", title: "Install window AC units", category: "HOME_SEASONAL", triggerType: "SEASONAL_WINDOW",
+    windowStartMonth: 5, windowStartDay: 1, windowEndMonth: 6, windowEndDay: 15, gates: { facts: { hasWindowAC: true } },
+    climateSensitive: true, reasonTemplate: "Put {name}'s window AC units in before the first heat wave — {window}.",
+    sourceUrl: "https://www.cdc.gov/disasters/extremeheat/index.html" },
+  { slug: "window-ac-remove", title: "Remove & store window ACs", category: "HOME_SEASONAL", triggerType: "SEASONAL_WINDOW",
+    windowStartMonth: 9, windowStartDay: 15, windowEndMonth: 10, windowEndDay: 31, gates: { facts: { hasWindowAC: true } },
+    climateSensitive: true, reasonTemplate: "Pull and store {name}'s window ACs before frost to stop drafts — {window}.",
+    sourceUrl: "https://www.energystar.gov/products/heating_cooling" },
+  { slug: "snow-contract", title: "Arrange snow removal", category: "HOME_SEASONAL", triggerType: "SEASONAL_WINDOW",
+    windowStartMonth: 10, windowStartDay: 1, windowEndMonth: 11, windowEndDay: 15, gates: { facts: { hasDriveway: true }, regions: SNOW },
+    climateSensitive: true, reasonTemplate: "Line up snow removal for {name} now — shoveling is a documented cardiac risk at their age — {window}.",
+    sourceUrl: "https://www.heart.org/en/news/2019/11/25/dont-fall-victim-to-the-dangers-of-snow-shoveling" },
+  { slug: "ice-melt-stock", title: "Stock ice melt & check shovels", category: "HOME_SEASONAL", triggerType: "SEASONAL_WINDOW",
+    windowStartMonth: 10, windowStartDay: 15, windowEndMonth: 11, windowEndDay: 30, gates: { regions: SNOW },
+    climateSensitive: true, reasonTemplate: "Stock ice melt and check the shovel/blower before the first storm hits {name} — {window}.",
+    sourceUrl: "https://www.ready.gov/winter-weather" },
+  { slug: "chimney-inspect", title: "Chimney inspection", category: "HOME_SEASONAL", triggerType: "SEASONAL_WINDOW",
+    windowStartMonth: 8, windowStartDay: 1, windowEndMonth: 10, windowEndDay: 31, gates: { facts: { hasFireplace: true } },
+    defaultRecurrence: "YEARLY", reasonTemplate: "Annual chimney inspection for {name} before fireplace season (NFPA 211) — {window}.",
+    sourceUrl: "https://www.nfpa.org/education-and-research/home-fire-safety/chimneys" },
+  { slug: "dryer-vent-clean", title: "Clean dryer vent", category: "HOME_SEASONAL", triggerType: "INTERVAL",
+    intervalDays: 365, intervalAnchor: "ASSUME_DUE", defaultRecurrence: "YEARLY",
+    reasonTemplate: "No record of {name}'s dryer vent being cleaned — it's a fire risk worth checking yearly.",
+    sourceUrl: "https://www.nfpa.org/education-and-research/home-fire-safety/clothes-dryers" },
+  { slug: "water-heater-flush", title: "Flush water heater", category: "HOME_SEASONAL", triggerType: "INTERVAL",
+    intervalDays: 365, intervalAnchor: "START_FRESH", gates: { residence: HOUSE_CONDO }, defaultRecurrence: "YEARLY",
+    reasonTemplate: "Flush the sediment from {name}'s water heater tank — about once a year.",
+    sourceUrl: "https://www.energy.gov/energysaver/water-heating" },
+  { slug: "water-heater-anode", title: "Check anode rod", category: "HOME_SEASONAL", triggerType: "INTERVAL",
+    intervalDays: 1095, intervalAnchor: "START_FRESH", gates: { residence: HOUSE }, active: false,
+    reasonTemplate: "Check the anode rod in {name}'s water heater — every few years extends the tank's life.",
+    sourceUrl: "https://www.energy.gov/energysaver/water-heating" },
+  { slug: "pest-control", title: "Quarterly pest treatment", category: "HOME_SEASONAL", triggerType: "INTERVAL",
+    intervalDays: 90, intervalAnchor: "START_FRESH", active: false, defaultRecurrence: "DAYS",
+    reasonTemplate: "Quarterly pest treatment for {name}'s home.",
+    sourceUrl: "https://www.epa.gov/safepestcontrol" },
+  { slug: "termite-inspect", title: "Termite inspection", category: "HOME_SEASONAL", triggerType: "INTERVAL",
+    intervalDays: 365, intervalAnchor: "START_FRESH", gates: { residence: HOUSE }, active: false, defaultRecurrence: "YEARLY",
+    reasonTemplate: "Annual termite inspection for {name}'s home.",
+    sourceUrl: "https://www.epa.gov/safepestcontrol/termites" },
+
+  // ── A.2 HOME_SAFETY ──
+  { slug: "smoke-batteries-spring", title: "Change smoke/CO batteries", category: "HOME_SAFETY", triggerType: "FIXED_DATE",
+    windowStartMonth: 3, windowStartDay: 1, windowEndMonth: 3, windowEndDay: 15, leadDays: 3,
+    reasonTemplate: "Clocks change, batteries change — swap and test {name}'s smoke and CO alarms — {window}.",
+    sourceUrl: "https://www.nfpa.org/education-and-research/home-fire-safety/smoke-alarms" },
+  { slug: "smoke-batteries-fall", title: "Change smoke/CO batteries", category: "HOME_SAFETY", triggerType: "FIXED_DATE",
+    windowStartMonth: 11, windowStartDay: 1, windowEndMonth: 11, windowEndDay: 15, leadDays: 3,
+    reasonTemplate: "Clocks change, batteries change — swap and test {name}'s smoke and CO alarms — {window}.",
+    sourceUrl: "https://www.nfpa.org/education-and-research/home-fire-safety/smoke-alarms" },
+  { slug: "smoke-alarm-age", title: "Check smoke-alarm age", category: "HOME_SAFETY", triggerType: "INTERVAL",
+    intervalDays: 3650, intervalAnchor: "ASSUME_DUE",
+    reasonTemplate: "Check the manufacture dates on {name}'s smoke alarms — replace any over 10 years (NFPA 72).",
+    sourceUrl: "https://www.nfpa.org/education-and-research/home-fire-safety/smoke-alarms" },
+  { slug: "co-alarm-age", title: "Check CO alarm age", category: "HOME_SAFETY", triggerType: "INTERVAL",
+    intervalDays: 2190, intervalAnchor: "ASSUME_DUE", active: false,
+    reasonTemplate: "Check the age of {name}'s CO alarms — most need replacing every 5–7 years.",
+    sourceUrl: "https://www.cdc.gov/carbon-monoxide/prevention/index.html" },
+  { slug: "safety-walkthrough", title: "Home safety walk-through", category: "HOME_SAFETY", triggerType: "INTERVAL",
+    intervalDays: 365, intervalAnchor: "ASSUME_DUE", defaultTaskType: "Note", defaultRecurrence: "YEARLY",
+    reasonTemplate: "Annual fall-prevention walk-through of {name}'s home: rugs, cords, stair rails, lighting, grab bars, tub mats (CDC STEADI).",
+    sourceUrl: "https://www.cdc.gov/steadi/index.html" },
+  { slug: "driving-checkin", title: "Driving check-in", category: "HOME_SAFETY", triggerType: "INTERVAL",
+    intervalDays: 365, intervalAnchor: "START_FRESH", gates: { facts: { drives: true } }, defaultTaskType: "Note", defaultRecurrence: "YEARLY",
+    reasonTemplate: "A yearly ride-along and CarFit check with {name} — watch for the NIA warning signs.",
+    sourceUrl: "https://www.nia.nih.gov/health/older-drivers" },
+
+  // ── A.3 MEDICAL_ADMIN ──
+  { slug: "medicare-oep", title: "Review Medicare coverage", category: "MEDICAL_ADMIN", triggerType: "FIXED_DATE",
+    windowStartMonth: 10, windowStartDay: 15, windowEndMonth: 12, windowEndDay: 7, minAge: 65, defaultTaskType: "Note",
+    reasonTemplate: "Medicare Open Enrollment runs {window} — the one window to change {name}'s plan for next year.",
+    sourceUrl: "https://www.medicare.gov/basics/get-started-with-medicare/get-more-coverage/joining-a-plan" },
+  { slug: "ma-oep", title: "Medicare Advantage enrollment", category: "MEDICAL_ADMIN", triggerType: "FIXED_DATE",
+    windowStartMonth: 1, windowStartDay: 1, windowEndMonth: 3, windowEndDay: 31, gates: { facts: { enrolledMedicareAdvantage: true } },
+    defaultTaskType: "Note", reasonTemplate: "Medicare Advantage open enrollment ({window}) lets {name} make one plan change.",
+    sourceUrl: "https://www.medicare.gov/basics/get-started-with-medicare/get-more-coverage/joining-a-plan" },
+  { slug: "annual-wellness-visit", title: "Medicare Annual Wellness Visit", category: "MEDICAL_ADMIN", triggerType: "INTERVAL",
+    intervalDays: 365, intervalAnchor: "ASSUME_DUE", minAge: 65, defaultTaskType: "Medical", defaultRecurrence: "YEARLY",
+    reasonTemplate: "Book {name}'s Medicare Annual Wellness Visit — it's covered and includes a cognitive screen.",
+    sourceUrl: "https://www.medicare.gov/coverage/yearly-wellness-visits" },
+  { slug: "flu-shot", title: "Flu shot", category: "MEDICAL_ADMIN", triggerType: "SEASONAL_WINDOW",
+    windowStartMonth: 9, windowStartDay: 1, windowEndMonth: 10, windowEndDay: 31, minAge: 65, defaultTaskType: "Medical", defaultRecurrence: "YEARLY",
+    reasonTemplate: "Flu shot for {name} — the high-dose version for 65+ — ideally by the end of October ({window}).",
+    sourceUrl: "https://www.cdc.gov/flu/prevent/index.html" },
+  { slug: "covid-shot", title: "Updated COVID vaccine", category: "MEDICAL_ADMIN", triggerType: "SEASONAL_WINDOW",
+    windowStartMonth: 9, windowStartDay: 1, windowEndMonth: 11, windowEndDay: 30, minAge: 65, defaultTaskType: "Medical", defaultRecurrence: "YEARLY",
+    reasonTemplate: "The updated fall COVID vaccine for {name} — {window}.",
+    sourceUrl: "https://www.cdc.gov/covid/vaccines/index.html" },
+  { slug: "rsv-vaccine", title: "RSV vaccine", category: "MEDICAL_ADMIN", triggerType: "ONE_TIME_AGE",
+    minAge: 75, defaultTaskType: "Medical",
+    reasonTemplate: "The RSV vaccine is a single dose (not annual) recommended for everyone 75+ — worth booking for {name}.",
+    sourceUrl: "https://www.cdc.gov/rsv/vaccines/index.html" },
+  { slug: "shingles-series", title: "Shingles vaccine (Shingrix)", category: "MEDICAL_ADMIN", triggerType: "ONE_TIME_AGE",
+    minAge: 50, defaultTaskType: "Medical",
+    reasonTemplate: "If {name} hasn't had Shingrix, it's two doses 2–6 months apart — recommended from age 50.",
+    sourceUrl: "https://www.cdc.gov/shingles/vaccine/index.html" },
+  { slug: "pneumococcal", title: "Pneumococcal vaccine", category: "MEDICAL_ADMIN", triggerType: "ONE_TIME_AGE",
+    minAge: 65, defaultTaskType: "Medical",
+    reasonTemplate: "If {name} hasn't had a pneumococcal vaccine, it's recommended at 65+.",
+    sourceUrl: "https://www.cdc.gov/pneumococcal/vaccines/index.html" },
+  { slug: "tdap-booster", title: "Td/Tdap booster", category: "MEDICAL_ADMIN", triggerType: "INTERVAL",
+    intervalDays: 3650, intervalAnchor: "ASSUME_DUE", defaultTaskType: "Medical",
+    reasonTemplate: "The tetanus (Td/Tdap) booster is a 10-year cadence — worth confirming {name} is current.",
+    sourceUrl: "https://www.cdc.gov/tetanus/vaccination/index.html" },
+  { slug: "brown-bag-review", title: "Annual med review", category: "MEDICAL_ADMIN", triggerType: "INTERVAL",
+    intervalDays: 365, intervalAnchor: "ASSUME_DUE", gates: { minActiveMeds: 1 }, defaultTaskType: "Medical", defaultRecurrence: "YEARLY",
+    reasonTemplate: "A yearly 'brown bag' review — bring all of {name}'s prescriptions, OTCs, and supplements to the doctor or pharmacist.",
+    sourceUrl: "https://www.fda.gov/drugs/resources-you-drugs/making-your-medicines-work-you" },
+  { slug: "med-sync-setup", title: "Set up med synchronization", category: "MEDICAL_ADMIN", triggerType: "ONE_TIME_AGE",
+    gates: { minActiveMeds: 3 }, defaultTaskType: "Note",
+    reasonTemplate: "With several prescriptions, ask {name}'s pharmacy about med sync — one monthly pickup for everything.",
+    sourceUrl: "https://www.ncpa.org/simplify-my-meds" },
+  { slug: "pill-organizer-weekly", title: "Refill weekly pill organizer", category: "MEDICAL_ADMIN", triggerType: "INTERVAL",
+    intervalDays: 7, intervalAnchor: "START_FRESH", gates: { facts: { livesAlone: true } }, active: false, defaultTaskType: "Note", defaultRecurrence: "WEEKLY",
+    reasonTemplate: "Refill {name}'s weekly pill organizer.",
+    sourceUrl: "https://www.nia.nih.gov/health/safe-use-medicines-older-adults" },
+  { slug: "dental-cleaning", title: "Dental cleaning", category: "MEDICAL_ADMIN", triggerType: "INTERVAL",
+    intervalDays: 182, intervalAnchor: "ASSUME_DUE", defaultTaskType: "Medical",
+    reasonTemplate: "A dental exam and cleaning for {name} — the usual cadence is about every six months.",
+    sourceUrl: "https://www.ada.org/resources/ada-library/oral-health-topics" },
+  { slug: "eye-exam-diabetes", title: "Dilated eye exam (diabetes)", category: "MEDICAL_ADMIN", triggerType: "INTERVAL",
+    intervalDays: 365, intervalAnchor: "ASSUME_DUE", gates: { facts: { hasDiabetes: true } }, defaultTaskType: "Medical", defaultRecurrence: "YEARLY",
+    reasonTemplate: "With diabetes, {name} needs a dilated eye exam every year to catch retinopathy early.",
+    sourceUrl: "https://www.aao.org/eye-health/diseases/diabetic-retinopathy" },
+  { slug: "eye-exam-general", title: "Comprehensive eye exam", category: "MEDICAL_ADMIN", triggerType: "INTERVAL",
+    intervalDays: 730, intervalAnchor: "ASSUME_DUE", minAge: 65, gates: { facts: { hasDiabetes: false } }, defaultTaskType: "Medical",
+    reasonTemplate: "A comprehensive eye exam for {name} every 1–2 years at 65+ — also part of fall prevention.",
+    sourceUrl: "https://www.aao.org/eye-health/tips-prevention/eye-exams-101" },
+  { slug: "hearing-test", title: "Hearing test", category: "MEDICAL_ADMIN", triggerType: "INTERVAL",
+    intervalDays: 730, intervalAnchor: "ASSUME_DUE", minAge: 65, defaultTaskType: "Medical",
+    reasonTemplate: "A hearing check for {name} every 1–3 years at 65+ — untreated loss is linked to isolation and falls.",
+    sourceUrl: "https://www.nia.nih.gov/health/hearing-and-hearing-loss/hearing-loss-common-problem-older-adults" },
+  { slug: "bone-density", title: "Bone density (DXA) scan", category: "MEDICAL_ADMIN", triggerType: "INTERVAL",
+    intervalDays: 730, intervalAnchor: "START_FRESH", active: false, defaultTaskType: "Medical",
+    reasonTemplate: "Medicare covers a bone-density (DXA) scan for {name} about every 24 months.",
+    sourceUrl: "https://www.medicare.gov/coverage/bone-mass-measurements" },
+  { slug: "mammogram", title: "Screening mammogram", category: "MEDICAL_ADMIN", triggerType: "INTERVAL",
+    intervalDays: 365, intervalAnchor: "START_FRESH", gates: { facts: { isFemale: true } }, active: false, defaultTaskType: "Medical",
+    reasonTemplate: "Medicare covers a yearly screening mammogram for {name}.",
+    sourceUrl: "https://www.medicare.gov/coverage/mammograms" },
+  { slug: "colonoscopy", title: "Colonoscopy", category: "MEDICAL_ADMIN", triggerType: "INTERVAL",
+    intervalDays: 3650, intervalAnchor: "START_FRESH", active: false, defaultTaskType: "Medical",
+    reasonTemplate: "Confirm {name} is on schedule for a colonoscopy per their doctor's cadence.",
+    sourceUrl: "https://www.cdc.gov/colorectal-cancer/screening/index.html" },
+
+  // ── A.4 VEHICLE ──
+  { slug: "car-service", title: "Car service", category: "VEHICLE", triggerType: "INTERVAL",
+    intervalDays: 182, intervalAnchor: "ASSUME_DUE", gates: { facts: { hasCar: true } }, defaultTaskType: "Errand",
+    reasonTemplate: "{name}'s car is due for an oil change and a basics check — tires, battery, wipers — at least twice a year even at low mileage.",
+    sourceUrl: "https://exchange.aaa.com/automotive/vehicle-maintenance/" },
+  { slug: "state-inspection", title: "State inspection", category: "VEHICLE", triggerType: "FIXED_DATE",
+    windowStartMonth: 1, windowStartDay: 1, windowEndMonth: 1, windowEndDay: 31, gates: { facts: { hasCar: true } }, active: false, defaultTaskType: "Errand",
+    reasonTemplate: "{name}'s state safety/emissions inspection is due — {window}.",
+    sourceUrl: "https://www.dmv.org/vehicle-inspection.php" },
+  { slug: "registration-renewal", title: "Registration renewal", category: "VEHICLE", triggerType: "INTERVAL",
+    intervalDays: 365, intervalAnchor: "START_FRESH", gates: { facts: { hasCar: true } }, active: false, defaultTaskType: "Errand", defaultRecurrence: "YEARLY",
+    reasonTemplate: "{name}'s vehicle registration renewal is coming up.",
+    sourceUrl: "https://www.dmv.org/registration.php" },
+  { slug: "roadside-renewal", title: "Roadside membership renewal", category: "VEHICLE", triggerType: "INTERVAL",
+    intervalDays: 365, intervalAnchor: "START_FRESH", gates: { facts: { hasCar: true } }, active: false, defaultTaskType: "Errand", defaultRecurrence: "YEARLY",
+    reasonTemplate: "{name}'s AAA/roadside membership is up for renewal.",
+    sourceUrl: "https://www.aaa.com/" },
+
+  // ── A.5 FINANCIAL_ADMIN ──
+  { slug: "tax-filing", title: "Tax filing", category: "FINANCIAL_ADMIN", triggerType: "FIXED_DATE",
+    windowStartMonth: 2, windowStartDay: 1, windowEndMonth: 4, windowEndDay: 15, gates: { circleLevel: true }, defaultTaskType: "Note",
+    reasonTemplate: "Tax season — file, or make sure the preparer has everything, before the April 15 deadline ({window}).",
+    sourceUrl: "https://www.irs.gov/filing" },
+  { slug: "rmd-annual", title: "Take the year's RMD", category: "FINANCIAL_ADMIN", triggerType: "FIXED_DATE",
+    windowStartMonth: 11, windowStartDay: 1, windowEndMonth: 12, windowEndDay: 31, minAge: 73, gates: { facts: { hasRetirementAccounts: true } }, defaultTaskType: "Note",
+    reasonTemplate: "Take {name}'s required minimum distribution by Dec 31 — the penalty for missing it is steep ({window}).",
+    sourceUrl: "https://www.irs.gov/retirement-plans/retirement-plan-and-ira-required-minimum-distributions-faqs" },
+  { slug: "rmd-first", title: "First-ever RMD", category: "FINANCIAL_ADMIN", triggerType: "ONE_TIME_AGE",
+    minAge: 73, gates: { facts: { hasRetirementAccounts: true } }, defaultTaskType: "Note",
+    reasonTemplate: "{name}'s first-ever RMD is due — the deadline rules differ the first year; most take it by Dec 31 of the age-73 year.",
+    sourceUrl: "https://www.irs.gov/retirement-plans/retirement-plan-and-ira-required-minimum-distributions-faqs" },
+  { slug: "est-taxes-quarterly", title: "Quarterly estimated taxes", category: "FINANCIAL_ADMIN", triggerType: "FIXED_DATE",
+    windowStartMonth: 4, windowStartDay: 1, windowEndMonth: 4, windowEndDay: 15, gates: { facts: { paysQuarterlyTaxes: true } }, active: false, defaultTaskType: "Note",
+    reasonTemplate: "{name}'s quarterly estimated tax payment is due — {window}.",
+    sourceUrl: "https://www.irs.gov/businesses/small-businesses-self-employed/estimated-taxes" },
+  { slug: "property-tax", title: "Property tax installment", category: "FINANCIAL_ADMIN", triggerType: "FIXED_DATE",
+    windowStartMonth: 6, windowStartDay: 1, windowEndMonth: 6, windowEndDay: 30, gates: { residence: HOUSE_CONDO }, active: false, defaultTaskType: "Note",
+    reasonTemplate: "{name}'s property-tax installment is due — and worth checking the senior exemption ({window}).",
+    sourceUrl: "https://www.irs.gov/taxtopics/tc503" },
+  { slug: "catalog-review", title: "Review Keeper's medical templates", category: "FINANCIAL_ADMIN", triggerType: "FIXED_DATE",
+    windowStartMonth: 7, windowStartDay: 1, windowEndMonth: 7, windowEndDay: 31, gates: { circleLevel: true }, defaultTaskType: "Note", defaultRecurrence: "YEARLY",
+    reasonTemplate: "Yearly check: review Keeper's medical templates against the CDC's updated adult immunization schedule.",
+    sourceUrl: "https://www.cdc.gov/vaccines/schedules/hcp/imz/adult.html" },
+];

@@ -5,7 +5,19 @@ import { requireCircleContext, requireRecipient } from "@/lib/access";
 import { revalidatePath } from "next/cache";
 import { ResidenceType, FactSource } from "@prisma/client";
 import { z } from "zod";
+import { regionForZip } from "@/lib/climate";
 import { isKnownFactKey, isFactValue, defaultFactsFor, ALL_FACTS } from "@/lib/facts";
+import { CATALOG } from "@/lib/catalog-data";
+import { sweepCircle } from "@/lib/jobs/sweep";
+
+/** Re-run the engine after a profile change so suggestions reflect it immediately (§11.3). */
+async function regenerate(circleId: string) {
+  try {
+    await sweepCircle(circleId);
+  } catch (error) {
+    console.error("suggestion sweep after profile change failed", error);
+  }
+}
 
 const RESIDENCE_TYPES = ["HOUSE", "CONDO", "APARTMENT", "FACILITY"] as const;
 const idSchema = z.string().min(1, "ID is required");
@@ -53,6 +65,7 @@ export async function createRecipient(data: {
       relationship: v.relationship || null,
       birthYear: v.birthYear ?? null,
       zip: v.zip || null,
+      climateRegion: regionForZip(v.zip), // derived, overridable on "What Keeper knows"
       residenceType: v.residenceType ?? null,
       ...(v.timezone ? { timezone: v.timezone } : {}),
     },
@@ -71,6 +84,7 @@ export async function createRecipient(data: {
     skipDuplicates: true,
   });
 
+  await regenerate(circleId);
   revalidatePath("/parents");
   return recipient;
 }
@@ -97,7 +111,7 @@ export async function updateRecipient(
       ...(v.name !== undefined ? { name: v.name } : {}),
       ...(v.relationship !== undefined ? { relationship: v.relationship || null } : {}),
       ...(v.birthYear !== undefined ? { birthYear: v.birthYear ?? null } : {}),
-      ...(v.zip !== undefined ? { zip: v.zip || null } : {}),
+      ...(v.zip !== undefined ? { zip: v.zip || null, climateRegion: regionForZip(v.zip) } : {}),
       ...(v.residenceType !== undefined ? { residenceType: v.residenceType ?? null } : {}),
       ...(v.timezone !== undefined ? { timezone: v.timezone } : {}),
     },
@@ -146,6 +160,18 @@ export async function setFact(
     create: { recipientId: validId, key, value, source },
   });
 
+  // Correcting a fact by hand drops suppressions on templates gated by it (§11.3), so
+  // a suggestion the user dismissed as "not applicable" can resurface once the fact changes.
+  if (source === FactSource.MANUAL) {
+    const dependentSlugs = CATALOG.filter((t) => t.gates?.facts && key in t.gates.facts).map((t) => t.slug);
+    if (dependentSlugs.length) {
+      await prisma.suggestionSuppression.deleteMany({
+        where: { recipientId: validId, templateSlug: { in: dependentSlugs } },
+      });
+    }
+  }
+
+  await regenerate(circleId);
   revalidatePath("/parents");
   return fact;
 }
@@ -170,5 +196,6 @@ export async function setFacts(recipientId: string, facts: Record<string, string
     ),
   );
 
+  await regenerate(circleId);
   revalidatePath("/parents");
 }
