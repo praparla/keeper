@@ -496,7 +496,7 @@ One **hourly tick** (pg_cron HTTP job → `POST /api/jobs/tick` with `CRON_SECRE
 | Weekly lookahead | Sunday, user-local 17:00 | week-ahead email |
 | Outcome prompts | daily | flip past appointments to "how did it go?", decay after 7 days |
 
-Every run writes a `JobRun` row (started/finished/counts/errors); each send writes `NotificationLog`. All jobs are **idempotent by natural key** (digest keyed `(userId, date)`, suggestions keyed `(templateId, recipientId, cycleKey)`) so a duplicate or retried tick is harmless. If no successful `JobRun` lands for 26h, the app shows a quiet banner ("reminders may be delayed") — fail loud, per canon.
+Every run writes a `JobRun` row (started/finished/counts/errors); each send writes `NotificationLog`. All jobs are **idempotent by natural key** (digest keyed `(userId, date)`, suggestions keyed `(templateId, cycleKey)` with scope embedded in the key — §11.2) so a duplicate or retried tick is harmless. If no successful `JobRun` lands for 26h, the app shows a quiet banner ("reminders may be delayed") — fail loud, per canon.
 
 ### 9.6 iOS path (staged; nothing built in v2, nothing blocked either)
 
@@ -748,7 +748,10 @@ model Suggestion {
   circle       CareCircle         @relation(fields: [circleId], references: [id], onDelete: Cascade)
   recipient    CareRecipient?     @relation(fields: [recipientId], references: [id], onDelete: Cascade)
   template     SuggestionTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  @@unique([templateId, recipientId, cycleKey])
+  // cycleKey embeds its scope ("recip_abc:2026-fall" / "circle:2026-tax-filing"):
+  // a composite unique over nullable recipientId would NOT dedupe circle-level rows,
+  // because Postgres treats NULLs as distinct in unique constraints
+  @@unique([templateId, cycleKey])
 }
 
 model SuggestionSuppression {
@@ -865,8 +868,11 @@ for template in active catalog:
                            ("No record of the last {title} — worth checking"),
                            START_FRESH waits one interval from recipient creation
        · ONE_TIME_AGE    → "once" (fires the year age gate is crossed)
+       cycleKey is always prefixed with its scope — the recipient id, or "circle"
+       for recipient-agnostic templates — so the (templateId, cycleKey) unique
+       constraint dedupes both levels despite recipientId being nullable (§10).
     3. FIRE — if now ∈ [windowStart − leadDays, windowEnd] and no Suggestion
-       row exists for (templateId, recipientId, cycleKey): create PENDING with
+       row exists for (templateId, cycleKey): create PENDING with
        rendered reason (placeholders: {name}, {window}, {frostDate}, {age}).
     4. EXPIRE — PENDING/SNOOZED suggestions past windowEnd → EXPIRED (kept for metrics).
 ```
