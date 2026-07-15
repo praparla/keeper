@@ -5,34 +5,41 @@
 
 ---
 
+## ⭐ CURRENT PRIORITY — Keeper v2 spec (2026-07-14)
+
+**The top priority is executing [`docs/keeper-v2-spec.md`](docs/keeper-v2-spec.md)** — the comprehensive product + implementation spec for parental care tracking: care-recipient profiles, medical module (meds/refills, appointments, providers), the predictive seasonal suggestion engine (~52-template catalog), real Google auth (Better Auth), CareCircle tenancy, Resend notifications, the $0 Vercel + Supabase migration, testing infra, and the almanac design language. Work proceeds in milestones **M0 → M4** (spec §15); start with M0 (test harness + auth + tenancy + hosting migration).
+
+- Spec **§17 reconciles every item below** — several entries are superseded or revised by it (marked inline). When in doubt, the spec wins.
+- **Implementation must pull best practices from `~/Projects/coding-best-practices/`** (base `CLAUDE.md`, `AGENTS.md`, `DESIGN.md`, per its `docs/new-project-starter.md` convention) — see spec §19. Before each milestone, re-sync with that repo's current base files.
+
+---
+
 ## High Priority
 
-- [ ] **Web Hosting** · `M`
-  Deploy to production web hosting. **Recommended: Railway Hobby ($5/month)** — container-based (no serverless cold starts or function timeouts), includes managed Postgres within the $5 credit, excellent Next.js DX, no vendor lock-in. Alternative: Vercel Hobby (free, personal/non-commercial use only per ToS) + Neon free tier (0.5 GB, auto-suspends between queries — 100–500ms cold start on first query after idle). Steps: push to GitHub → connect Railway → provision Railway Postgres → set `DATABASE_URL`, `AUTH_SECRET`, and OAuth credentials as environment variables → deploy. Do not use Vercel for commercial use; use Railway or upgrade to Vercel Pro ($20/month) if revenue-generating.
+- [ ] **Web Hosting** · `M` — *superseded by spec §9.1 (2026-07-14): decision is now Vercel Hobby + Supabase Postgres at $0/mo; Railway decommissioned in M0*
+  ~~Deploy to production web hosting.~~ **Recommended: Railway Hobby ($5/month)** — container-based (no serverless cold starts or function timeouts), includes managed Postgres within the $5 credit, excellent Next.js DX, no vendor lock-in. Alternative: Vercel Hobby (free, personal/non-commercial use only per ToS) + Neon free tier (0.5 GB, auto-suspends between queries — 100–500ms cold start on first query after idle). Steps: push to GitHub → connect Railway → provision Railway Postgres → set `DATABASE_URL`, `AUTH_SECRET`, and OAuth credentials as environment variables → deploy. Do not use Vercel for commercial use; use Railway or upgrade to Vercel Pro ($20/month) if revenue-generating.
 
-- [ ] **iOS App Store Distribution** · `XL`
-  Ship Keeper to the iOS App Store. **Recommended approach: Capacitor (load from remote hosted URL).** Capacitor wraps the existing Next.js web app in a native WebView — ~90% code reuse. Loading from the hosted domain (not local static bundle) means cookie-based NextAuth v5 sessions work identically to the browser with zero auth changes. Key constraints: Server Actions don't execute in the Capacitor shell (they're server-side); mutations must go through explicit API routes (`src/app/api/`) alongside existing Server Actions. Steps: (1) `npm install @capacitor/core @capacitor/cli @capacitor/ios`; (2) set `server.url` in `capacitor.config.ts` to hosted domain; (3) add Capacitor plugins for push notifications and secure storage; (4) enroll in Apple Developer Program ($99/year, required); (5) submit via Xcode + App Store Connect. **Long-term path:** if native feel becomes critical (scroll physics, animations), migrate to a Solito monorepo (Next.js web + Expo React Native mobile sharing hooks/types/business logic — but UI components are written twice). Avoid full Swift rewrite — zero code reuse, expensive.
+- [ ] **iOS App Store Distribution** · `XL` — *revised by spec §9.6 (2026-07-14): remote-URL wrapping is now a documented App Store Guideline 4.2 rejection risk; path is installable PWA first (M4), bundled-assets Capacitor only if App Store presence proves necessary*
+  Ship Keeper to the iOS App Store. ~~**Recommended approach: Capacitor (load from remote hosted URL).**~~ Capacitor wraps the existing Next.js web app in a native WebView — ~90% code reuse. Loading from the hosted domain (not local static bundle) means cookie-based NextAuth v5 sessions work identically to the browser with zero auth changes. Key constraints: Server Actions don't execute in the Capacitor shell (they're server-side); mutations must go through explicit API routes (`src/app/api/`) alongside existing Server Actions. Steps: (1) `npm install @capacitor/core @capacitor/cli @capacitor/ios`; (2) set `server.url` in `capacitor.config.ts` to hosted domain; (3) add Capacitor plugins for push notifications and secure storage; (4) enroll in Apple Developer Program ($99/year, required); (5) submit via Xcode + App Store Connect. **Long-term path:** if native feel becomes critical (scroll physics, animations), migrate to a Solito monorepo (Next.js web + Expo React Native mobile sharing hooks/types/business logic — but UI components are written twice). Avoid full Swift rewrite — zero code reuse, expensive.
   - Auth note: With Capacitor + remote URL, no auth changes needed. If ever moving to a true native React Native build, add a `/api/mobile-token` endpoint that issues a short-lived JWT (15 min) from the existing NextAuth session; store it in iOS Keychain via `capacitor-secure-storage-plugin`. Never store tokens in `localStorage`.
   - Security note: iOS app hits the Next.js server (Railway/Vercel) via HTTPS — never expose `DATABASE_URL` or a raw DB connection. Rate-limit auth endpoints even at small scale.
   - Cost summary at <50 users: Railway $5/month + Apple Developer $99/year ≈ **~$13/month all-in**.
 
-- [ ] **Deployment** · `M`
-  Push to GitHub, connect to Vercel. Provision Vercel Postgres and update `DATABASE_URL`.
+- [ ] **Deployment** · `M` — *superseded by spec §9.1 (2026-07-14): Vercel yes, but Supabase Postgres (free, pg_cron) rather than Vercel Postgres; full migration runbook in the spec*
+  ~~Push to GitHub, connect to Vercel. Provision Vercel Postgres and update `DATABASE_URL`.~~
 
-- [ ] **Authentication** · `L`
-  Re-enable auth gates (currently bypassed with `DEV_USER`). Configure actual Google Provider client IDs and a real SMS OTP service (e.g., Twilio Verify). Remove `src/lib/dev-user.ts` and restore `auth()` calls in all server actions, pages, and API routes. Search for `TODO:` comments to find every bypass point.
+- [ ] **Authentication** · `L` — *revised by spec §6.1/§9.3 (2026-07-14): Google-only via Better Auth (Auth.js is in maintenance mode); SMS OTP dropped entirely, not built. M0.*
+  Re-enable auth gates (currently bypassed with `DEV_USER`). ~~Configure actual Google Provider client IDs and a real SMS OTP service (e.g., Twilio Verify).~~ Remove `src/lib/dev-user.ts` and restore session checks in all server actions, pages, and API routes. Search for `TODO:` comments to find every bypass point.
 
 - [ ] **Workload Visibility** · `M`
   A quiet "who's done what" summary (past 7 and 30 days): tasks completed, check-ins logged, vitals updated, per family member. No gamification — just data. Addresses the unspoken "I'm doing more than you" tension that 40% of caregiver families report. No competitor app has built this well. *Source: AARP caregiver sibling conflict research.*
 
-- [ ] **Notifications — Real Integrations** · `M`
-  Replace `lib/notifications.ts` console logs with actual Resend (email) and Twilio (SMS). Batch non-urgent task updates into a morning digest (8am) rather than firing on every change. Medical/urgent tasks notify immediately.
+- [ ] **Notifications — Real Integrations** · `M` — *revised by spec §13 (2026-07-14): Resend email yes (needs the ~$10/yr domain); Twilio/SMS cut (A2P 10DLC overhead); web push is the P1 second channel. M3.*
+  Replace `lib/notifications.ts` console logs with actual Resend (email) ~~and Twilio (SMS)~~. Batch non-urgent task updates into a morning digest (8am) rather than firing on every change. Medical/urgent tasks notify immediately.
 
-- [ ] **Server Action Input Validation** · `S`
-  Add zod schemas for all Server Action inputs (`createTask`, `updateTask`, `upsertVitalInfo`, `updateProfile`). Currently accepting raw unvalidated input from clients. *Found in UAT 2026-03-18.*
+- [x] **Server Action Input Validation** · `S` *(Done 2026-03-18: zod schemas across `tasks.ts`, `vital-info.ts`, `user.ts` — see issues.md UAT-004)*
 
-- [ ] **Loading & Error States for All Routes** · `S`
-  Add `loading.tsx`, `error.tsx`, and `not-found.tsx` to each route group under `(app)/`. Currently no visual feedback during navigation or error recovery. *Found in UAT 2026-03-18.*
+- [x] **Loading & Error States for All Routes** · `S` *(Done 2026-03-18: `loading.tsx` skeletons + shared `error.tsx`/`not-found.tsx` — see issues.md UAT-005/006)*
 
 ---
 
