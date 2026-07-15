@@ -29,7 +29,7 @@
 13. [Notifications & scheduled jobs](#13-notifications-and-scheduled-jobs)
 14. [Success metrics](#14-success-metrics)
 15. [Rollout plan (milestones M0–M4)](#15-rollout-plan)
-16. [Risks & mitigations](#16-risks-and-mitigations)
+16. [Risks & mitigations](#16-risks--mitigations)
 17. [Backlog reconciliation](#17-backlog-reconciliation)
 18. [Open questions for Pranava](#18-open-questions)
 19. [Engineering & design canon](#19-engineering-and-design-canon)
