@@ -47,9 +47,9 @@ describe("createCircle", () => {
     mocks.getMembership.mockResolvedValue(null);
   });
 
-  it("creates a circle with the caller as owner and redirects to the dashboard", async () => {
+  it("creates a circle with the caller as owner and redirects to add a parent", async () => {
     mocks.careCircleCreate.mockResolvedValue({ id: "circle-a" });
-    await expect(createCircle(formData({ name: "The Smiths" }))).rejects.toThrow("REDIRECT:/dashboard");
+    await expect(createCircle(formData({ name: "The Smiths" }))).rejects.toThrow("REDIRECT:/parents");
     expect(mocks.careCircleCreate).toHaveBeenCalledWith({
       data: { name: "The Smiths", members: { create: { userId: "user-a", role: "OWNER" } } },
     });
@@ -68,7 +68,7 @@ describe("createCircle", () => {
         clientVersion: "test",
       })
     );
-    await expect(createCircle(formData({ name: "The Smiths" }))).rejects.toThrow("REDIRECT:/dashboard");
+    await expect(createCircle(formData({ name: "The Smiths" }))).rejects.toThrow("REDIRECT:/parents");
   });
 
   it("propagates a non-conflict database error", async () => {

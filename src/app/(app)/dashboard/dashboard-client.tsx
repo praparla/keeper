@@ -5,7 +5,7 @@ import { Task, User } from "@prisma/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { TaskCard } from "@/components/task-card";
-import { QuickAddFab } from "@/components/quick-add-fab";
+import { QuickAddFab, type RecipientChip } from "@/components/quick-add-fab";
 import { EmptyState } from "@/components/empty-state";
 import { Download, Inbox, ClipboardList, CheckCircle2 } from "lucide-react";
 
@@ -19,11 +19,13 @@ export function DashboardClient({
   myTasks,
   resolved,
   userName,
+  recipients = [],
 }: {
   unassigned: TaskWithRelations[];
   myTasks: TaskWithRelations[];
   resolved: TaskWithRelations[];
   userName: string;
+  recipients?: RecipientChip[];
 }) {
   const [fabOpen, setFabOpen] = useState(false);
 
@@ -103,7 +105,7 @@ export function DashboardClient({
         </TabsContent>
       </Tabs>
 
-      <QuickAddFab open={fabOpen} onOpenChange={setFabOpen} />
+      <QuickAddFab open={fabOpen} onOpenChange={setFabOpen} recipients={recipients} />
     </div>
   );
 }

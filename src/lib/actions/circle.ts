@@ -27,7 +27,25 @@ export async function createCircle(formData: FormData) {
       error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
     if (!isDuplicateMembership) throw error;
   }
-  redirect("/dashboard");
+  // A brand-new coordinator's first job is adding the parent they're caring for.
+  redirect("/parents");
+}
+
+export async function getCircleMembers() {
+  const { circleId } = await requireCircleContext();
+  const memberships = await prisma.membership.findMany({
+    where: { circleId },
+    include: { user: true },
+    orderBy: { joinedAt: "asc" },
+  });
+  return memberships.map((m) => ({
+    id: m.user.id,
+    name: m.user.name,
+    email: m.user.email,
+    image: m.user.image,
+    color: m.user.color,
+    role: m.role,
+  }));
 }
 
 export async function createInvite() {

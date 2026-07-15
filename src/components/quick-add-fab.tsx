@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Flag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,13 +23,21 @@ import {
 import { createTask } from "@/lib/actions/tasks";
 import { toast } from "sonner";
 import { TaskType } from "@prisma/client";
+import { cn } from "@/lib/utils";
+
+export interface RecipientChip {
+  id: string;
+  label: string;
+}
 
 export function QuickAddFab({
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
+  recipients = [],
 }: {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  recipients?: RecipientChip[];
 } = {}) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
@@ -38,7 +46,18 @@ export function QuickAddFab({
   const [description, setDescription] = useState("");
   const [type, setType] = useState<TaskType>("Note");
   const [dueDate, setDueDate] = useState("");
+  const [recipientId, setRecipientId] = useState<string>("");
+  const [priority, setPriority] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  function reset() {
+    setTitle("");
+    setDescription("");
+    setType("Note");
+    setDueDate("");
+    setRecipientId("");
+    setPriority(false);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -51,12 +70,11 @@ export function QuickAddFab({
         description: description.trim() || undefined,
         type,
         dueDate: dueDate || undefined,
+        recipientId: recipientId || null,
+        priority,
       });
       toast.success("Task added!");
-      setTitle("");
-      setDescription("");
-      setType("Note");
-      setDueDate("");
+      reset();
       setOpen(false);
     } catch {
       toast.error("Failed to add task");
@@ -71,6 +89,7 @@ export function QuickAddFab({
         size="icon"
         className="fixed bottom-24 right-4 z-50 h-14 w-14 rounded-full shadow-lg"
         onClick={() => setOpen(true)}
+        aria-label="Add task"
       >
         <Plus className="h-6 w-6" />
       </Button>
@@ -86,7 +105,7 @@ export function QuickAddFab({
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="title">
-                Title <span className="text-destructive">*</span>
+                Title <span className="text-accent-urgent">*</span>
               </Label>
               <Input
                 id="title"
@@ -98,19 +117,53 @@ export function QuickAddFab({
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="type">Type</Label>
-              <Select value={type} onValueChange={(v) => setType(v as TaskType)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Note">Note</SelectItem>
-                  <SelectItem value="Medical">Medical</SelectItem>
-                  <SelectItem value="Household">Household</SelectItem>
-                  <SelectItem value="Errand">Errand</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* Parent chip — one extra tap, never required (§6.3). */}
+            {recipients.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {recipients.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => setRecipientId((cur) => (cur === r.id ? "" : r.id))}
+                    className={cn(
+                      "rounded-full border px-3 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      recipientId === r.id
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border text-foreground",
+                    )}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center gap-3">
+              <div className="flex-1 space-y-2">
+                <Label htmlFor="type">Type</Label>
+                <Select value={type} onValueChange={(v) => setType(v as TaskType)}>
+                  <SelectTrigger id="type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Note">Note</SelectItem>
+                    <SelectItem value="Medical">Medical</SelectItem>
+                    <SelectItem value="Household">Household</SelectItem>
+                    <SelectItem value="Errand">Errand</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPriority((p) => !p)}
+                aria-pressed={priority}
+                className={cn(
+                  "mt-6 flex items-center gap-1 rounded-md border px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  priority ? "border-accent-urgent text-accent-urgent" : "border-border text-muted-foreground",
+                )}
+              >
+                <Flag className="h-4 w-4" strokeWidth={1.5} /> Urgent
+              </button>
             </div>
 
             <div className="space-y-2">

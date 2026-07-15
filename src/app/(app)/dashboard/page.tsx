@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage() {
   const { user, circleId } = await requireCircleContext();
 
-  const [activeTasks, resolvedTasks] = await Promise.all([
+  const [activeTasks, resolvedTasks, recipients] = await Promise.all([
     prisma.task.findMany({
       where: { circleId, status: { not: "Resolved" } },
       include: { assignee: true, creator: true },
@@ -18,6 +18,11 @@ export default async function DashboardPage() {
       include: { assignee: true, creator: true },
       orderBy: { updatedAt: "desc" },
       take: 20,
+    }),
+    prisma.careRecipient.findMany({
+      where: { circleId },
+      select: { id: true, name: true, relationship: true },
+      orderBy: { createdAt: "asc" },
     }),
   ]);
 
@@ -30,6 +35,7 @@ export default async function DashboardPage() {
       myTasks={myTasks}
       resolved={resolvedTasks}
       userName={user.name}
+      recipients={recipients.map((r) => ({ id: r.id, label: r.relationship || r.name }))}
     />
   );
 }
