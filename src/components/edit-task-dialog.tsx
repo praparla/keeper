@@ -10,6 +10,16 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -49,6 +59,7 @@ export function EditTaskDialog({
   const [status, setStatus] = useState<TaskStatus>(task.status);
   const [dueDate, setDueDate] = useState(formatDateForInput(task.dueDate));
   const [submitting, setSubmitting] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   // Sync state when a different task is opened
   useEffect(() => {
@@ -82,8 +93,7 @@ export function EditTaskDialog({
   }
 
   async function handleDelete() {
-    if (!confirm("Delete this task?")) return;
-
+    setConfirmDeleteOpen(false);
     setSubmitting(true);
     try {
       await deleteTask(task.id);
@@ -175,7 +185,7 @@ export function EditTaskDialog({
             <Button
               type="button"
               variant="destructive"
-              onClick={handleDelete}
+              onClick={() => setConfirmDeleteOpen(true)}
               disabled={submitting}
             >
               Delete
@@ -183,6 +193,21 @@ export function EditTaskDialog({
           </div>
         </form>
       </DialogContent>
+
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this task?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This can&apos;t be undone. &ldquo;{task.title}&rdquo; will be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

@@ -1,6 +1,6 @@
 # CLAUDE.md — Keeper Project Development Principles
 
-> Next.js 16 (App Router) · Prisma · NextAuth v5 · React 19 · Tailwind CSS · TypeScript
+> Next.js 16 (App Router) · Prisma · Better Auth · React 19 · Tailwind CSS · TypeScript
 
 ---
 
@@ -63,12 +63,15 @@ Never blindly write code. Always follow this loop:
 
 ---
 
-## Authentication & Authorization (NextAuth v5)
+## Authentication & Authorization (Better Auth)
 
-- **Session check in every protected Server Action.** Call `auth()` at the top of every action that reads or writes user data. Throw or return an error if no session exists.
+- **Session check in every protected Server Action.** Use `requireUser()` or `requireCircleContext()` from `src/lib/access.ts`. Throw if no session or membership exists.
 - **Never trust client-supplied user IDs.** Always derive the acting user from `session.user.id`, not from request body or URL params.
 - **Auth config lives in `src/lib/auth.ts`.** Do not duplicate auth logic elsewhere.
+- **Preserve legacy auth tables during cutover.** Better Auth uses `AuthSession`, `AuthAccount`, and `AuthVerification`; remove old NextAuth tables only after production sign-in succeeds.
 - **Environment variables for secrets.** `AUTH_SECRET`, `DATABASE_URL`, and any OAuth credentials must be in `.env.local` only, never committed.
+- **`authClient` methods resolve `{ data, error }`, they don't throw.** A `try/catch` around `authClient.signIn.social(...)` / `authClient.signOut(...)` never fires on failure — check the returned `error` field instead (see `login-client.tsx` for the pattern). Caught this the hard way wrapping `signOut` in a dead try/catch during the 2026-07-15 code-review pass.
+- **`requireCircleContext()`/`getMembership()` are wrapped in React's `cache()`.** A layout guard and a child page can both call them in the same request without doubling the DB round-trip — don't remove the `cache()` wrapper when touching `src/lib/access.ts`, and use it for any new per-request lookup shared between a layout and its pages.
 
 ---
 
@@ -76,18 +79,8 @@ Never blindly write code. Always follow this loop:
 
 **Tests are mandatory with every code change.** Bug fix → regression test. New feature → feature tests. Refactor → confirm existing tests still pass.
 
-### Setup (not yet installed — add when writing first tests)
-Recommended stack: **Vitest** + **@testing-library/react** + **@testing-library/user-event**
-
-```bash
-npm install -D vitest @vitejs/plugin-react @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom
-```
-
-Add to `package.json` scripts:
-```json
-"test": "vitest",
-"test:run": "vitest run"
-```
+### Setup
+Vitest, Testing Library, jsdom, and CI are installed. Tests live beside sources as `*.test.ts(x)`.
 
 ### What to test
 - **Server Actions** — unit test business logic and DB interactions (mock Prisma with `vitest.mock`)
@@ -187,18 +180,21 @@ Maintain a `backlog.md` for ideas, features, and enhancements.
 - **Closed-loop validation.** After implementing, always run `npm run build` and `npm run lint` (and `npm run test:run` once tests exist) to verify the output without human intervention.
 - **Keep this file current.** When something unexpected happens — a pattern that failed, a correct CLI invocation, a library quirk — add a concise note here. This file should grow incrementally as organizational scar tissue.
 - **Write big plans to files.** For large tasks, write the spec to a `docs/` markdown file and review it before executing.
+- **Log every agent run to `docs/agent-runs.md`.** Standing practice (since 2026-07-14): any session that uses subagents, research fan-outs, or workflows appends an entry there — purpose, tokens, tool uses, wall time, result quality, and a token-efficiency verdict (including the cheaper route that would have been as accurate). Used to evaluate across sessions which agent shapes earn their tokens. Template at the top of that file.
+- **Size code-review agent fan-out to the diff, not to a flat "high effort" default.** Cap fan-out width to 2-3 concurrent agents without asking — a wide burst (8-10+) risks server-side rate-limit errors *and* burns tokens on redundant angles that rediscover the same bug from different lenses. Before invoking `/code-review` at "high" or above on a large diff, scope it down explicitly: pick 2-4 finder angles that fit the actual risk surface (e.g. correctness + auth/tenancy for a Server Action change; skip efficiency/altitude/reuse passes unless the diff is genuinely architectural), and skip the separate 1-vote verify pass — read the flagged lines yourself instead of spawning a verifier per finding. A prior repo (`coding-best-practices/PROMPTING.md`) logged the identical mistake: an 8-angle review on an 11-file diff cost ~980K tokens across 14 calls, with 3 of 8 angles independently re-finding the same two bugs — a single manual read would have caught both for near-zero cost. Reserve the full multi-angle sweep for changes that touch auth, money, or data-loss paths across many files; a routine feature diff gets 2-3 targeted agents or a manual pass.
+- **Inline before subagent.** A subagent costs ~25-40K tokens of orchestration overhead before it does anything useful. Don't spawn one for a bounded lookup, a small file read, or anything a `grep`/`Read` call answers directly — reserve agents for genuine multi-file synthesis or open-ended research.
 
 ---
 
-## Railway Deployment
+## Deployment transition
 
-**Hosted at:** `keeper-production-a8ea.up.railway.app`
-**Railway project:** `modest-warmth` · GitHub auto-deploy from `praparla/keeper` (main branch)
+**Current production:** `keeper-production-a8ea.up.railway.app` on Railway. **Target:** Vercel + Supabase after the M0 runbook is completed and verified.
+**Railway project:** `modest-warmth` · GitHub auto-deploy from `pranava0x0/keeper` (main branch; repo was `praparla/keeper` — renamed, old URL redirects for git but confuses `gh`, so keep remotes pointed at the new name)
 **Region:** europe-west4-drams3a
 
 ### How deploys work
 - Every `git push origin main` triggers an auto-deploy on Railway.
-- Build pipeline: `prisma db push` → `tsx prisma/seed.ts` → `next build` (see `package.json` "build" script).
+- Build pipeline is now `prisma generate` → `next build`. Schema migrations and seed runs are explicit release steps; preview builds never mutate production.
 - The seed is idempotent (uses `upsert` for users, `deleteMany` + `create` for vital info).
 
 ### Environment variables (set on Railway, not in code)
@@ -219,5 +215,5 @@ When migrating the Prisma datasource:
 2. No schema changes needed — Prisma's SQLite and PostgreSQL schemas are compatible for this project's types.
 3. The `prisma db push` in the build script creates all tables on first deploy.
 
-### Current auth state (as of 2026-03-18)
-Auth is **bypassed** via `src/lib/dev-user.ts` which hardcodes `pranava@family.dev`. The production DB must have this user seeded or the dashboard will crash. Real auth (Google OAuth + SMS OTP) is a backlog item.
+### Current auth state (as of 2026-07-15)
+Better Auth Google sign-in, circle tenancy, onboarding, and single-use invite links are implemented. Production still needs OAuth credentials, migrations, and the two-user acceptance test in `docs/m0-runbook.md` before the bypass removal is operationally complete.
