@@ -187,6 +187,7 @@ Maintain a `backlog.md` for ideas, features, and enhancements.
 - **Closed-loop validation.** After implementing, always run `npm run build` and `npm run lint` (and `npm run test:run` once tests exist) to verify the output without human intervention.
 - **Keep this file current.** When something unexpected happens — a pattern that failed, a correct CLI invocation, a library quirk — add a concise note here. This file should grow incrementally as organizational scar tissue.
 - **Write big plans to files.** For large tasks, write the spec to a `docs/` markdown file and review it before executing.
+- **Log every agent run to `docs/agent-runs.md`.** Standing practice (since 2026-07-14): any session that uses subagents, research fan-outs, or workflows appends an entry there — purpose, tokens, tool uses, wall time, result quality, and a token-efficiency verdict (including the cheaper route that would have been as accurate). Used to evaluate across sessions which agent shapes earn their tokens. Template at the top of that file.
 
 ---
 
