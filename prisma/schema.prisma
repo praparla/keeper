@@ -99,6 +99,7 @@ model LegacyAccount {
   user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+  @@index([userId])
   @@map("Account")
 }
 
@@ -109,6 +110,7 @@ model LegacySession {
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("Session")
 }
 
@@ -166,6 +168,7 @@ model Invite {
   invitedBy   User       @relation("InviteCreator", fields: [invitedById], references: [id], onDelete: Cascade)
 
   @@index([circleId])
+  @@index([invitedById])
 }
 
 enum TaskType {
@@ -200,6 +203,8 @@ model Task {
   updatedAt DateTime @updatedAt
 
   @@index([circleId, status, dueDate])
+  @@index([assigneeId])
+  @@index([creatorId])
 }
 
 model VitalInfo {
