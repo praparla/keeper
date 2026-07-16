@@ -210,6 +210,17 @@ export async function resolveTask(taskId: string, now: Date = new Date()) {
     data: { status: TaskStatus.Resolved },
   });
 
+  // Resolving a refill-generated task (medicationId set) is a fill event — advance the
+  // med's cycle, or the next sweep would see isRefillDue() still true and spawn a
+  // duplicate refill task. (Mark-filled from the med row does this too.)
+  if (existing.medicationId) {
+    await prisma.medication.update({
+      where: { id: existing.medicationId },
+      data: { lastFilledAt: now },
+    });
+    revalidatePath("/parents");
+  }
+
   let spawned = null;
   if (isRecurring(existing)) {
     const from = existing.dueDate ?? now;

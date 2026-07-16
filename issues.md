@@ -43,6 +43,16 @@ _Last updated: 2026-07-16_
 
 ## Resolved Issues
 
+### [M2-006] Resolving a refill task didn't advance the med's fill date → duplicate refill next sweep
+- **Severity**: medium
+- **Page/Section**: `src/lib/actions/tasks.ts` (`resolveTask`)
+- **Discovered**: 2026-07-16 (Codex PR review, P2)
+- **Resolved**: 2026-07-16
+- **Status**: resolved — **code bug**
+- **Description**: A refill task carries `medicationId`. Completing it via swipe-resolve (rather than "Mark filled") only set the task to Resolved and never updated `Medication.lastFilledAt`. Because `sweepRefills` dedupes on *open* refill tasks and `isRefillDue()` still read the stale fill date, the next sweep saw the med as due with no open task and spawned a **duplicate** refill task.
+- **Steps to Reproduce**: Let a refill task generate → swipe-resolve it on the board (not "Mark filled") → run the sweep → a second identical refill task appears.
+- **Fix**: `resolveTask` now advances `Medication.lastFilledAt` to `now` when the resolved task has a `medicationId`. Regression tests in `src/lib/actions/tasks-recurrence.test.ts`.
+
 ### [M2-001] Nightly sweep crashes after the first accept/dismiss (dedupe missed terminal-status cycles)
 - **Severity**: high
 - **Page/Section**: `src/lib/jobs/sweep.ts` (`loadCircleInputs`)

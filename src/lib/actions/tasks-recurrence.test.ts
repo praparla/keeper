@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   findFirst: vi.fn(),
   update: vi.fn(),
   create: vi.fn(),
+  medUpdate: vi.fn(),
   revalidatePath: vi.fn(),
 }));
 
@@ -18,6 +19,7 @@ vi.mock("@/lib/access", () => ({
 vi.mock("@/lib/db", () => ({
   prisma: {
     task: { findFirst: mocks.findFirst, update: mocks.update, create: mocks.create },
+    medication: { update: mocks.medUpdate },
     membership: { findUnique: vi.fn() },
   },
 }));
@@ -74,6 +76,23 @@ describe("resolveTask recurrence materialization", () => {
         dueDate: new Date("2026-03-17T09:00:00"),
       }),
     });
+  });
+
+  it("resolving a refill-generated task advances the medication's fill date", async () => {
+    // Regression (Codex P2): without this, the next sweep sees isRefillDue() still true
+    // and spawns a duplicate refill task.
+    mocks.findFirst.mockResolvedValue({
+      id: "task-r", circleId: "circle-a", recurrence: "NONE", dueDate: null, medicationId: "med-1",
+    });
+    const now = new Date("2026-07-16T00:00:00Z");
+    await resolveTask("task-r", now);
+    expect(mocks.medUpdate).toHaveBeenCalledWith({ where: { id: "med-1" }, data: { lastFilledAt: now } });
+  });
+
+  it("resolving a non-refill task does not touch any medication", async () => {
+    mocks.findFirst.mockResolvedValue({ id: "task-a", circleId: "circle-a", recurrence: "NONE", dueDate: null, medicationId: null });
+    await resolveTask("task-a");
+    expect(mocks.medUpdate).not.toHaveBeenCalled();
   });
 
   it("rejects resolving a task outside the acting circle", async () => {
