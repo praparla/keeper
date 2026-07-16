@@ -65,8 +65,11 @@ async function loadCircleInputs(circleId: string) {
         _count: { select: { medications: { where: { active: true } } } },
       },
     }),
+    // ALL statuses — the dedupe set must include ACCEPTED/DISMISSED/EXPIRED cycles, or
+    // the engine would re-emit a create for an already-handled (templateId, cycleKey) and
+    // hit the unique constraint. evaluate() filters to PENDING/SNOOZED for the expire pass.
     prisma.suggestion.findMany({
-      where: { circleId, status: { in: [SuggestionStatus.PENDING, SuggestionStatus.SNOOZED] } },
+      where: { circleId },
       select: { id: true, templateId: true, cycleKey: true, status: true, windowEnd: true },
     }),
     prisma.task.findMany({
@@ -115,15 +118,16 @@ export async function sweepCircle(circleId: string, now: Date = new Date()): Pro
   const { create, expire } = evaluate(templates, engineRecipients, circle, now);
 
   await prisma.$transaction([
-    ...create.map((s) =>
-      prisma.suggestion.create({
-        data: {
-          circleId: s.circleId, recipientId: s.recipientId, templateId: s.templateId,
-          cycleKey: s.cycleKey, title: s.title, reason: s.reason,
-          windowStart: s.windowStart, windowEnd: s.windowEnd, status: SuggestionStatus.PENDING,
-        },
-      }),
-    ),
+    // createMany + skipDuplicates so a concurrent sweep (cron vs. an on-save regenerate)
+    // racing on the same (templateId, cycleKey) can't throw a unique violation.
+    prisma.suggestion.createMany({
+      data: create.map((s) => ({
+        circleId: s.circleId, recipientId: s.recipientId, templateId: s.templateId,
+        cycleKey: s.cycleKey, title: s.title, reason: s.reason,
+        windowStart: s.windowStart, windowEnd: s.windowEnd, status: SuggestionStatus.PENDING,
+      })),
+      skipDuplicates: true,
+    }),
     ...(expire.length
       ? [prisma.suggestion.updateMany({ where: { id: { in: expire } }, data: { status: SuggestionStatus.EXPIRED } })]
       : []),

@@ -1,19 +1,34 @@
 # Keeper — Issues Log
 
-_Last updated: 2026-07-15_
+_Last updated: 2026-07-16_
 
 ---
 
 ## Open Issues
 
-### [UAT-002] Vital Info page has no way to add new categories
-- **Severity**: high
-- **Page/Section**: `/vital-info`
-- **Discovered**: 2026-03-18
+### [M2-003] Suggestion inbox refresh runs a full circle sweep on every profile-fact tap
+- **Severity**: low (perf)
+- **Page/Section**: `src/lib/actions/recipient.ts` (`setFact` → `regenerate`)
+- **Discovered**: 2026-07-16 (M1/M2 code review)
 - **Status**: open
-- **Description**: The Health Info page only shows categories that were pre-seeded. There is no UI to add a new vital info category — users can only edit existing entries. The empty state message says "Run npm run db:seed to get started" which is a developer-facing instruction, not user-facing.
-- **Steps to Reproduce**: Delete all VitalInfo records from DB → visit `/vital-info` → see developer message with no way to add data.
-- **Fix**: _(pending)_
+- **Description**: Cycling a chip in "What Keeper knows" calls `setFact` (source MANUAL), which runs a full `sweepCircle` synchronously. Rapidly toggling several facts triggers several full sweeps. Correct, but wasteful at scale.
+- **Fix**: _(backlog) debounce/queue the regenerate, or move it off the request path._
+
+### [M2-004] `sweepCircle` loads every historical suggestion for dedupe
+- **Severity**: low
+- **Page/Section**: `src/lib/jobs/sweep.ts` (`loadCircleInputs`)
+- **Discovered**: 2026-07-16 (M1/M2 code review)
+- **Status**: open
+- **Description**: Dedupe correctness requires loading all suggestions (all statuses) — this set grows unbounded over years.
+- **Fix**: _(backlog) prune EXPIRED rows older than ~2 cycles, or scope the dedupe query to current-cycle keys._
+
+### [M2-005] `dismissSuggestion` writes are `Promise.all`, not a transaction
+- **Severity**: low
+- **Page/Section**: `src/lib/actions/suggestion.ts` (`dismissSuggestion`)
+- **Discovered**: 2026-07-16 (M1/M2 code review)
+- **Status**: open
+- **Description**: The status update + suppression upsert + fact upserts run concurrently, not atomically. All are idempotent upserts so partial failure is recoverable, but not atomic.
+- **Fix**: _(backlog) wrap in an interactive `$transaction`._
 
 ### [UAT-007] Edit dialog for resolved tasks allows re-editing without clear UX
 - **Severity**: low
@@ -27,6 +42,33 @@ _Last updated: 2026-07-15_
 ---
 
 ## Resolved Issues
+
+### [M2-001] Nightly sweep crashes after the first accept/dismiss (dedupe missed terminal-status cycles)
+- **Severity**: high
+- **Page/Section**: `src/lib/jobs/sweep.ts` (`loadCircleInputs`)
+- **Discovered**: 2026-07-16 (M1/M2 code review)
+- **Resolved**: 2026-07-16
+- **Status**: resolved — **code bug**
+- **Description**: The dedupe input loaded only `PENDING`/`SNOOZED` suggestions, so once a suggestion was `ACCEPTED`/`DISMISSED`/`EXPIRED`, the next sweep re-emitted a `create` for the same `(templateId, cycleKey)`, hit the unique index, and threw — killing the whole sweep transaction. This would break suggestion generation across a circle after the very first accept/dismiss (nightly cron, on-fact-edit regenerate, and the inbox refresh button).
+- **Steps to Reproduce**: Accept any suggestion → edit a fact (triggers a re-sweep) → the sweep throws a P2002 unique violation and no suggestions update.
+- **Fix**: Load all suggestion statuses into the dedupe set; also switched the persist to `createMany({ skipDuplicates: true })` so concurrent sweeps can't collide either. Regression test: `src/lib/engine/evaluate.test.ts` ("does not re-create a cycle already ACCEPTED/DISMISSED").
+
+### [M2-002] Date-only values render a day early in negative-offset timezones
+- **Severity**: medium
+- **Page/Section**: `src/lib/constants.ts` (`formatAlmanacDate`), `src/components/task-card.tsx`
+- **Discovered**: 2026-07-16 (M1/M2 code review)
+- **Resolved**: 2026-07-16
+- **Status**: resolved — **code bug**
+- **Description**: Suggestion windows, task due dates, and refill run-outs are stored as UTC midnight but were formatted in the viewer's local timezone, so a Sep 1 window rendered as "Aug 31" for any US (UTC-negative) user. The engine's own reason lines already forced UTC; the display formatters did not, and `task-card` used raw `toLocaleDateString()`.
+- **Steps to Reproduce**: In a UTC-negative timezone, view a suggestion with a Sep 1 window or a task due Sep 1 → it shows Aug 31.
+- **Fix**: `formatAlmanacDate` now formats in UTC (date-only values); `task-card` uses it instead of raw `toLocaleDateString`. `formatAlmanacDateTime` stays local (real appointment instants).
+
+### [UAT-002] Vital Info had no way to add new categories — addressed in M1
+- **Severity**: high
+- **Page/Section**: was `/vital-info`, now `/parents` → Vital info section
+- **Resolved**: 2026-07-16 (M1)
+- **Status**: resolved — superseded
+- **Description**: v1's vital-info page could only edit seeded categories. M1 replaced it with the per-recipient Vital info section in the Parents hub, which has an explicit "Add" flow (category + details).
 
 ### [CR-001] Notification-preference migration didn't backfill legacy opt-outs
 - **Severity**: high

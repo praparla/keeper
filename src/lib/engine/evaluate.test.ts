@@ -177,6 +177,18 @@ describe("engine — gates & dedupe (§11.2 / §12.3)", () => {
     expect(second.create).toHaveLength(0);
   });
 
+  it("does not re-create a cycle already ACCEPTED/DISMISSED (dedupe spans all statuses)", () => {
+    // Regression: the sweep must feed terminal-status suggestions into the dedupe set,
+    // or the engine re-emits a create that violates the (templateId, cycleKey) unique index.
+    for (const status of ["ACCEPTED", "DISMISSED", "EXPIRED"] as const) {
+      const existing: ExistingSuggestion[] = [
+        { id: "s1", templateId: "tpl-1", cycleKey: "recip_r1:2026-furnace-tuneup-fall", status, windowEnd: at("2026-10-31T00:00:00Z") },
+      ];
+      const { create } = evaluate([buildTemplate()], [buildRecipient()], circleState({ existing }), at("2026-09-15T12:00:00Z"));
+      expect(create, status).toHaveLength(0);
+    }
+  });
+
   it("two recipients with different facts get independent outcomes", () => {
     const a = buildRecipient({ id: "rA", facts: { hasLawn: "true" } });
     const b = buildRecipient({ id: "rB", facts: { hasLawn: "false" } });

@@ -69,14 +69,19 @@ export const RECURRENCE_LABELS: Record<Recurrence, string> = {
   SEASONAL: "Seasonal window",
 };
 
-/** Almanac date formatting — "Oct 15", never ISO strings in UI (§8.4). */
+/**
+ * Almanac date formatting — "Oct 15", never ISO strings in UI (§8.4). Date-only values
+ * (task due dates, suggestion windows, refill run-outs) are stored as UTC midnight, so
+ * they must render in UTC or they slip a day in negative-offset timezones (most US users).
+ */
 export function formatAlmanacDate(date: Date | string | null | undefined): string {
   if (!date) return "";
   const d = typeof date === "string" ? new Date(date) : date;
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
+/** For real instants (appointment times), rendered in the viewer's local timezone. */
 export function formatAlmanacDateTime(date: Date | string | null | undefined): string {
   if (!date) return "";
   const d = typeof date === "string" ? new Date(date) : date;

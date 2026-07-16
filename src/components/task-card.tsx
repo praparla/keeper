@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EditTaskDialog } from "@/components/edit-task-dialog";
 import { assignTaskToMe, resolveTask } from "@/lib/actions/tasks";
 import { MemberAvatar } from "@/components/member-avatar";
+import { formatAlmanacDate } from "@/lib/constants";
 import { toast } from "sonner";
 import { UserCheck, Check, Calendar, Pencil } from "lucide-react";
 
@@ -182,7 +183,7 @@ export function TaskCard({
               {task.dueDate && (
                 <span className="flex items-center gap-1">
                   <Calendar className="h-3 w-3" />
-                  {new Date(task.dueDate).toLocaleDateString()}
+                  {formatAlmanacDate(task.dueDate)}
                 </span>
               )}
               {task.assignee && (
