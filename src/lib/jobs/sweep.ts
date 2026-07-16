@@ -55,7 +55,13 @@ function completionMap(tasks: { templateSlug: string | null; updatedAt: Date }[]
   return out;
 }
 
-async function loadCircleInputs(circleId: string) {
+/** Suggestions older than this can't collide with a current-window cycleKey, so they're
+ *  excluded from the dedupe load (bounding it); createMany({skipDuplicates}) backstops any
+ *  edge case. Covers a full year + buffer so a NOT_NOW-expired same-year cycle is retained. */
+const DEDUPE_WINDOW_DAYS = 400;
+
+async function loadCircleInputs(circleId: string, now: Date) {
+  const dedupeCutoff = new Date(now.getTime() - DEDUPE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
   const [recipients, existing, resolvedTasks] = await Promise.all([
     prisma.careRecipient.findMany({
       where: { circleId },
@@ -65,11 +71,18 @@ async function loadCircleInputs(circleId: string) {
         _count: { select: { medications: { where: { active: true } } } },
       },
     }),
-    // ALL statuses — the dedupe set must include ACCEPTED/DISMISSED/EXPIRED cycles, or
-    // the engine would re-emit a create for an already-handled (templateId, cycleKey) and
-    // hit the unique constraint. evaluate() filters to PENDING/SNOOZED for the expire pass.
+    // Dedupe set: all still-active (PENDING/SNOOZED, any age — also drives the expire pass)
+    // plus recently-created terminal rows (ACCEPTED/DISMISSED/EXPIRED within the window), so
+    // the engine won't re-emit an already-handled (templateId, cycleKey). Older terminal rows
+    // can't match a current cycleKey; createMany({skipDuplicates}) covers any remaining edge.
     prisma.suggestion.findMany({
-      where: { circleId },
+      where: {
+        circleId,
+        OR: [
+          { status: { in: [SuggestionStatus.PENDING, SuggestionStatus.SNOOZED] } },
+          { createdAt: { gte: dedupeCutoff } },
+        ],
+      },
       select: { id: true, templateId: true, cycleKey: true, status: true, windowEnd: true },
     }),
     prisma.task.findMany({
@@ -112,7 +125,7 @@ export interface SweepCounts {
 export async function sweepCircle(circleId: string, now: Date = new Date()): Promise<SweepCounts> {
   const [templates, { engineRecipients, circle }] = await Promise.all([
     loadTemplates(),
-    loadCircleInputs(circleId),
+    loadCircleInputs(circleId, now),
   ]);
 
   const { create, expire } = evaluate(templates, engineRecipients, circle, now);

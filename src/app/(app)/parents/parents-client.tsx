@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -40,6 +40,7 @@ import {
   createAppointment, updateAppointment, recordAppointmentOutcome, deleteAppointment,
 } from "@/lib/actions/appointment";
 import { upsertVitalInfo, deleteVitalInfo } from "@/lib/actions/vital-info";
+import { refreshSuggestions } from "@/lib/actions/suggestion";
 
 const SECTIONS = [
   { key: "meds", label: "Meds", icon: Pill },
@@ -766,6 +767,16 @@ function VitalSection({ recipient, onDone }: { recipient: RecipientDTO; onDone: 
 
 function FactsSection({ recipient, onDone }: { recipient: RecipientDTO; onDone: () => void }) {
   const factMap = new Map(recipient.facts.map((f) => [f.key, f]));
+  // Debounce the engine re-run: many rapid chip taps → one sweep once the user settles (M2-003).
+  const sweepTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (sweepTimer.current) clearTimeout(sweepTimer.current); }, []);
+
+  function scheduleRefresh() {
+    if (sweepTimer.current) clearTimeout(sweepTimer.current);
+    sweepTimer.current = setTimeout(() => {
+      refreshSuggestions().then(onDone).catch(() => {});
+    }, 800);
+  }
 
   async function cycle(key: string, current: FactValue) {
     const order: FactValue[] = ["true", "false", "unknown"];
@@ -773,6 +784,7 @@ function FactsSection({ recipient, onDone }: { recipient: RecipientDTO; onDone: 
     try {
       await setFact(recipient.id, key, next);
       onDone();
+      scheduleRefresh();
     } catch {
       toast.error("Couldn't update");
     }

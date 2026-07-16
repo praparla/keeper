@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/db";
 import { AuthorizationError, requireCircleContext } from "@/lib/access";
 import { revalidatePath } from "next/cache";
-import { SuggestionStatus, DismissReason, Recurrence, FactSource } from "@prisma/client";
+import { SuggestionStatus, DismissReason, Recurrence, FactSource, type Prisma } from "@prisma/client";
 import { z } from "zod";
 import { sweepCircle } from "@/lib/jobs/sweep";
 
@@ -133,7 +133,9 @@ export async function dismissSuggestion(id: string, reason: (typeof DISMISS_REAS
     return;
   }
 
-  const writes: Promise<unknown>[] = [
+  // Collected as PrismaPromises and run in one $transaction so the status change,
+  // suppression, and fact flips commit atomically (M2-005).
+  const writes: Prisma.PrismaPromise<unknown>[] = [
     prisma.suggestion.update({
       where: { id: s.id },
       data: { status: SuggestionStatus.DISMISSED, dismissReason: validReason as DismissReason },
@@ -166,7 +168,7 @@ export async function dismissSuggestion(id: string, reason: (typeof DISMISS_REAS
     }
   }
 
-  await Promise.all(writes);
+  await prisma.$transaction(writes);
   revalidatePath("/dashboard");
   revalidatePath("/parents");
 }

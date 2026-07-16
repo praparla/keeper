@@ -171,7 +171,9 @@ export async function setFact(
     }
   }
 
-  await regenerate(circleId);
+  // Deliberately NOT sweeping here (M2-003): a single fact correction is one of possibly
+  // many rapid chip taps in "What Keeper knows". The UI debounces a single refreshSuggestions()
+  // once the user settles, instead of running a full circle sweep per tap.
   revalidatePath("/parents");
   return fact;
 }

@@ -6,30 +6,6 @@ _Last updated: 2026-07-16_
 
 ## Open Issues
 
-### [M2-003] Suggestion inbox refresh runs a full circle sweep on every profile-fact tap
-- **Severity**: low (perf)
-- **Page/Section**: `src/lib/actions/recipient.ts` (`setFact` → `regenerate`)
-- **Discovered**: 2026-07-16 (M1/M2 code review)
-- **Status**: open
-- **Description**: Cycling a chip in "What Keeper knows" calls `setFact` (source MANUAL), which runs a full `sweepCircle` synchronously. Rapidly toggling several facts triggers several full sweeps. Correct, but wasteful at scale.
-- **Fix**: _(backlog) debounce/queue the regenerate, or move it off the request path._
-
-### [M2-004] `sweepCircle` loads every historical suggestion for dedupe
-- **Severity**: low
-- **Page/Section**: `src/lib/jobs/sweep.ts` (`loadCircleInputs`)
-- **Discovered**: 2026-07-16 (M1/M2 code review)
-- **Status**: open
-- **Description**: Dedupe correctness requires loading all suggestions (all statuses) — this set grows unbounded over years.
-- **Fix**: _(backlog) prune EXPIRED rows older than ~2 cycles, or scope the dedupe query to current-cycle keys._
-
-### [M2-005] `dismissSuggestion` writes are `Promise.all`, not a transaction
-- **Severity**: low
-- **Page/Section**: `src/lib/actions/suggestion.ts` (`dismissSuggestion`)
-- **Discovered**: 2026-07-16 (M1/M2 code review)
-- **Status**: open
-- **Description**: The status update + suppression upsert + fact upserts run concurrently, not atomically. All are idempotent upserts so partial failure is recoverable, but not atomic.
-- **Fix**: _(backlog) wrap in an interactive `$transaction`._
-
 ### [UAT-007] Edit dialog for resolved tasks allows re-editing without clear UX
 - **Severity**: low
 - **Page/Section**: `/dashboard` History tab
@@ -42,6 +18,33 @@ _Last updated: 2026-07-16_
 ---
 
 ## Resolved Issues
+
+### [M2-003] Full circle sweep ran on every profile-fact tap
+- **Severity**: low (perf)
+- **Page/Section**: `src/lib/actions/recipient.ts` (`setFact`), `src/app/(app)/parents/parents-client.tsx` (`FactsSection`)
+- **Discovered**: 2026-07-16 (M1/M2 code review)
+- **Resolved**: 2026-07-16
+- **Status**: resolved
+- **Description**: Cycling a chip in "What Keeper knows" ran a full `sweepCircle` synchronously on every tap; rapid toggling meant N sweeps.
+- **Fix**: `setFact` no longer sweeps (it still drops dependent suppressions synchronously). `FactsSection` debounces a single `refreshSuggestions()` 800ms after the last change, so rapid toggles collapse to one sweep. Bulk onboarding (`setFacts`) and `createRecipient` still regenerate immediately for the reveal.
+
+### [M2-004] Dedupe loaded every historical suggestion
+- **Severity**: low
+- **Page/Section**: `src/lib/jobs/sweep.ts` (`loadCircleInputs`)
+- **Discovered**: 2026-07-16 (M1/M2 code review)
+- **Resolved**: 2026-07-16
+- **Status**: resolved
+- **Description**: The dedupe query loaded all suggestions of all statuses — an unbounded set over years.
+- **Fix**: Scoped to PENDING/SNOOZED (any age, also drives expire) plus terminal rows created within a 400-day window. Older terminal rows can't collide with a current-window `cycleKey`, and `createMany({ skipDuplicates: true })` backstops any remaining edge.
+
+### [M2-005] `dismissSuggestion` writes weren't atomic
+- **Severity**: low
+- **Page/Section**: `src/lib/actions/suggestion.ts` (`dismissSuggestion`)
+- **Discovered**: 2026-07-16 (M1/M2 code review)
+- **Resolved**: 2026-07-16
+- **Status**: resolved
+- **Description**: Status change + suppression + fact flips ran via `Promise.all`, not atomically.
+- **Fix**: Collected as `PrismaPromise`s and run through a single `prisma.$transaction([...])`.
 
 ### [M2-006] Resolving a refill task didn't advance the med's fill date → duplicate refill next sweep
 - **Severity**: medium
