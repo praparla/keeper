@@ -202,18 +202,23 @@ Maintain a `backlog.md` for ideas, features, and enhancements.
 - `DATABASE_PUBLIC_URL` — references `${{Postgres.DATABASE_PUBLIC_URL}}` (public proxy, used at **build time**)
 - `AUTH_SECRET` — generated with `openssl rand -base64 32`
 
-### Critical: build-time vs runtime DB access
-Railway's private network (`*.railway.internal`) is **not available during builds**. Any Prisma command in the build script must use the public URL:
+### Critical: the build never mutates the database
+**The build script is `prisma generate && next build` — it does NOT run `prisma db push`, migrations, or the seed.** A `git push origin main` auto-deploys, but that deploy only compiles code; it cannot cause data loss because it never touches schema or rows. This was a deliberate change (2026-07-15): schema migrations and seeds are **explicit release steps**, never part of preview/production builds. Do not reintroduce `db push` into `build` — an earlier version of this note showed exactly that, and it triggered a false data-loss alarm during the M0 merge.
+
+Schema changes reach production via reviewed migrations only:
 ```
-"build": "DATABASE_URL=$DATABASE_PUBLIC_URL prisma db push && DATABASE_URL=$DATABASE_PUBLIC_URL tsx prisma/seed.ts && next build"
+DATABASE_URL=$DATABASE_PUBLIC_URL npm run db:migrate:deploy    # applies prisma/migrations/* in order
+DATABASE_URL=$DATABASE_PUBLIC_URL npm run db:seed              # demo data only, idempotent
 ```
-At runtime, `DATABASE_URL` automatically uses the fast internal connection.
+Any Prisma command run manually against a build/release environment must use `DATABASE_PUBLIC_URL` (Railway's private `*.railway.internal` network is unavailable during builds/CI). At runtime the app uses the fast internal `DATABASE_URL`. Migration playbooks: `docs/m0-runbook.md` (tenancy cutover), `docs/m1-runbook.md` (care model + VitalInfo re-scope).
 
 ### Switching from SQLite to PostgreSQL
 When migrating the Prisma datasource:
 1. Change `provider` to `"postgresql"` and `url` to `env("DATABASE_URL")` in `prisma/schema.prisma`.
 2. No schema changes needed — Prisma's SQLite and PostgreSQL schemas are compatible for this project's types.
-3. The `prisma db push` in the build script creates all tables on first deploy.
+3. The first `prisma migrate deploy` release step (not the build) creates all tables.
 
-### Current auth state (as of 2026-07-15)
-Better Auth Google sign-in, circle tenancy, onboarding, and single-use invite links are implemented. Production still needs OAuth credentials, migrations, and the two-user acceptance test in `docs/m0-runbook.md` before the bypass removal is operationally complete.
+### Current state (as of 2026-07-15)
+- **M0** (auth/tenancy foundations): Better Auth Google sign-in, circle tenancy, onboarding, and single-use invite links are implemented. Production still needs OAuth credentials, the M0 migrations applied, and the two-user acceptance test in `docs/m0-runbook.md` before the bypass removal is operationally complete.
+- **M1** (care model): `CareRecipient` + profile facts, medications with a refill loop, appointments + providers, conditions, per-recipient `VitalInfo` (moved off circle scope), and task recurrence (materialized-next-instance) are implemented. IA is now four tabs (Today · Calendar · Parents · Family). Design pass applied: evergreen/parchment/clay almanac palette, serif content voice. Migration playbook: `docs/m1-runbook.md`.
+- **M2** (the almanac / suggestion engine): the pure engine (`src/lib/engine/`, `evaluate()` — rules × facts × calendar, deterministic given `now`), a ~52-template catalog (`src/lib/catalog-data.ts`, seeded to `SuggestionTemplate` by `npm run db:seed:catalog` — an **explicit release step, never the build**), climate calibration (`src/lib/climate.ts`), the nightly sweep (`src/lib/jobs/sweep.ts`, triggered via `POST /api/cron/sweep` guarded by `CRON_SECRET`), the suggestion inbox on Today + `/suggestions` season preview, and the full accept/adjust/snooze/dismiss feedback loop (dismiss-as-not-applicable writes a `ProfileFact` + suppression; editing a fact drops dependent suppressions; the engine re-runs on profile changes). The M2 migration is additive. Notifications/emails (digest, appointment reminders) remain **M3**.

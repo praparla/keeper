@@ -46,6 +46,15 @@ export function taskInCircle(id: string, circleId: string) {
   return { id, circleId };
 }
 
-export function vitalInfoInCircle(id: string, circleId: string) {
-  return { id, circleId };
+/**
+ * Verify a recipient belongs to the acting user's circle. Returns the recipient
+ * or throws — the single gate every recipient-scoped action funnels through so a
+ * client-supplied recipientId can never reach another circle's data.
+ */
+export async function requireRecipient(recipientId: string, circleId: string) {
+  const recipient = await prisma.careRecipient.findFirst({
+    where: { id: recipientId, circleId },
+  });
+  if (!recipient) throw new AuthorizationError("Recipient not found in your circle");
+  return recipient;
 }

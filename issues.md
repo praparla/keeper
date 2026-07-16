@@ -1,19 +1,10 @@
 # Keeper — Issues Log
 
-_Last updated: 2026-07-15_
+_Last updated: 2026-07-16_
 
 ---
 
 ## Open Issues
-
-### [UAT-002] Vital Info page has no way to add new categories
-- **Severity**: high
-- **Page/Section**: `/vital-info`
-- **Discovered**: 2026-03-18
-- **Status**: open
-- **Description**: The Health Info page only shows categories that were pre-seeded. There is no UI to add a new vital info category — users can only edit existing entries. The empty state message says "Run npm run db:seed to get started" which is a developer-facing instruction, not user-facing.
-- **Steps to Reproduce**: Delete all VitalInfo records from DB → visit `/vital-info` → see developer message with no way to add data.
-- **Fix**: _(pending)_
 
 ### [UAT-007] Edit dialog for resolved tasks allows re-editing without clear UX
 - **Severity**: low
@@ -27,6 +18,70 @@ _Last updated: 2026-07-15_
 ---
 
 ## Resolved Issues
+
+### [M2-003] Full circle sweep ran on every profile-fact tap
+- **Severity**: low (perf)
+- **Page/Section**: `src/lib/actions/recipient.ts` (`setFact`), `src/app/(app)/parents/parents-client.tsx` (`FactsSection`)
+- **Discovered**: 2026-07-16 (M1/M2 code review)
+- **Resolved**: 2026-07-16
+- **Status**: resolved
+- **Description**: Cycling a chip in "What Keeper knows" ran a full `sweepCircle` synchronously on every tap; rapid toggling meant N sweeps.
+- **Fix**: `setFact` no longer sweeps (it still drops dependent suppressions synchronously). `FactsSection` debounces a single `refreshSuggestions()` 800ms after the last change, so rapid toggles collapse to one sweep. Bulk onboarding (`setFacts`) and `createRecipient` still regenerate immediately for the reveal.
+
+### [M2-004] Dedupe loaded every historical suggestion
+- **Severity**: low
+- **Page/Section**: `src/lib/jobs/sweep.ts` (`loadCircleInputs`)
+- **Discovered**: 2026-07-16 (M1/M2 code review)
+- **Resolved**: 2026-07-16
+- **Status**: resolved
+- **Description**: The dedupe query loaded all suggestions of all statuses — an unbounded set over years.
+- **Fix**: Scoped to PENDING/SNOOZED (any age, also drives expire) plus terminal rows created within a 400-day window. Older terminal rows can't collide with a current-window `cycleKey`, and `createMany({ skipDuplicates: true })` backstops any remaining edge.
+
+### [M2-005] `dismissSuggestion` writes weren't atomic
+- **Severity**: low
+- **Page/Section**: `src/lib/actions/suggestion.ts` (`dismissSuggestion`)
+- **Discovered**: 2026-07-16 (M1/M2 code review)
+- **Resolved**: 2026-07-16
+- **Status**: resolved
+- **Description**: Status change + suppression + fact flips ran via `Promise.all`, not atomically.
+- **Fix**: Collected as `PrismaPromise`s and run through a single `prisma.$transaction([...])`.
+
+### [M2-006] Resolving a refill task didn't advance the med's fill date → duplicate refill next sweep
+- **Severity**: medium
+- **Page/Section**: `src/lib/actions/tasks.ts` (`resolveTask`)
+- **Discovered**: 2026-07-16 (Codex PR review, P2)
+- **Resolved**: 2026-07-16
+- **Status**: resolved — **code bug**
+- **Description**: A refill task carries `medicationId`. Completing it via swipe-resolve (rather than "Mark filled") only set the task to Resolved and never updated `Medication.lastFilledAt`. Because `sweepRefills` dedupes on *open* refill tasks and `isRefillDue()` still read the stale fill date, the next sweep saw the med as due with no open task and spawned a **duplicate** refill task.
+- **Steps to Reproduce**: Let a refill task generate → swipe-resolve it on the board (not "Mark filled") → run the sweep → a second identical refill task appears.
+- **Fix**: `resolveTask` now advances `Medication.lastFilledAt` to `now` when the resolved task has a `medicationId`. Regression tests in `src/lib/actions/tasks-recurrence.test.ts`.
+
+### [M2-001] Nightly sweep crashes after the first accept/dismiss (dedupe missed terminal-status cycles)
+- **Severity**: high
+- **Page/Section**: `src/lib/jobs/sweep.ts` (`loadCircleInputs`)
+- **Discovered**: 2026-07-16 (M1/M2 code review)
+- **Resolved**: 2026-07-16
+- **Status**: resolved — **code bug**
+- **Description**: The dedupe input loaded only `PENDING`/`SNOOZED` suggestions, so once a suggestion was `ACCEPTED`/`DISMISSED`/`EXPIRED`, the next sweep re-emitted a `create` for the same `(templateId, cycleKey)`, hit the unique index, and threw — killing the whole sweep transaction. This would break suggestion generation across a circle after the very first accept/dismiss (nightly cron, on-fact-edit regenerate, and the inbox refresh button).
+- **Steps to Reproduce**: Accept any suggestion → edit a fact (triggers a re-sweep) → the sweep throws a P2002 unique violation and no suggestions update.
+- **Fix**: Load all suggestion statuses into the dedupe set; also switched the persist to `createMany({ skipDuplicates: true })` so concurrent sweeps can't collide either. Regression test: `src/lib/engine/evaluate.test.ts` ("does not re-create a cycle already ACCEPTED/DISMISSED").
+
+### [M2-002] Date-only values render a day early in negative-offset timezones
+- **Severity**: medium
+- **Page/Section**: `src/lib/constants.ts` (`formatAlmanacDate`), `src/components/task-card.tsx`
+- **Discovered**: 2026-07-16 (M1/M2 code review)
+- **Resolved**: 2026-07-16
+- **Status**: resolved — **code bug**
+- **Description**: Suggestion windows, task due dates, and refill run-outs are stored as UTC midnight but were formatted in the viewer's local timezone, so a Sep 1 window rendered as "Aug 31" for any US (UTC-negative) user. The engine's own reason lines already forced UTC; the display formatters did not, and `task-card` used raw `toLocaleDateString()`.
+- **Steps to Reproduce**: In a UTC-negative timezone, view a suggestion with a Sep 1 window or a task due Sep 1 → it shows Aug 31.
+- **Fix**: `formatAlmanacDate` now formats in UTC (date-only values); `task-card` uses it instead of raw `toLocaleDateString`. `formatAlmanacDateTime` stays local (real appointment instants).
+
+### [UAT-002] Vital Info had no way to add new categories — addressed in M1
+- **Severity**: high
+- **Page/Section**: was `/vital-info`, now `/parents` → Vital info section
+- **Resolved**: 2026-07-16 (M1)
+- **Status**: resolved — superseded
+- **Description**: v1's vital-info page could only edit seeded categories. M1 replaced it with the per-recipient Vital info section in the Parents hub, which has an explicit "Add" flow (category + details).
 
 ### [CR-001] Notification-preference migration didn't backfill legacy opt-outs
 - **Severity**: high

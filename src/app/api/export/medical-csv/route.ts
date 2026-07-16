@@ -20,13 +20,15 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     }),
     prisma.vitalInfo.findMany({
-      where: { circleId },
-      orderBy: { category: "asc" },
+      where: { recipient: { circleId } },
+      include: { recipient: { select: { name: true } } },
+      orderBy: [{ recipient: { name: "asc" } }, { category: "asc" }],
     }),
   ]);
 
   const healthInfoCsv = stringify(
     vitalInfo.map((info) => ({
+      Recipient: info.recipient.name,
       Category: info.category,
       Details: info.content,
       "Last Updated": info.updatedAt.toISOString().split("T")[0],
